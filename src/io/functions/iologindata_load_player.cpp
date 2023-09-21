@@ -131,6 +131,7 @@ bool IOLoginDataLoad::loadPlayerFirst(Player* player, DBResult_ptr result) {
 	player->setBankBalance(result->getNumber<uint64_t>("balance"));
 	player->quickLootFallbackToMainContainer = result->getNumber<bool>("quickloot_fallback");
 	player->setSex(static_cast<PlayerSex_t>(result->getNumber<uint16_t>("sex")));
+	player->setPronoun(static_cast<PlayerPronoun_t>(result->getNumber<uint16_t>("pronoun")));
 	player->level = std::max<uint32_t>(1, result->getNumber<uint32_t>("level"));
 	player->soul = static_cast<uint8_t>(result->getNumber<unsigned short>("soul"));
 	player->capacity = result->getNumber<uint32_t>("cap") * 100;
@@ -218,7 +219,7 @@ void IOLoginDataLoad::loadPlayerBlessings(Player* player, DBResult_ptr result) {
 	}
 }
 
-void IOLoginDataLoad::loadPlayerConditions(const Player* player, DBResult_ptr result) {
+void IOLoginDataLoad::loadPlayerConditions(Player* player, DBResult_ptr result) {
 	if (!result || !player) {
 		g_logger().warn("[IOLoginData::loadPlayer] - Player or Result nullptr: {}", __FUNCTION__);
 		return;
@@ -229,14 +230,10 @@ void IOLoginDataLoad::loadPlayerConditions(const Player* player, DBResult_ptr re
 	PropStream propStream;
 	propStream.init(attr, attrSize);
 
-	std::list<std::unique_ptr<Condition>> conditionList;
 	Condition* condition = Condition::createCondition(propStream);
 	while (condition) {
-		std::unique_ptr<Condition> uniqueCondition(condition);
-		if (uniqueCondition->unserialize(propStream)) {
-			conditionList.push_front(std::move(uniqueCondition));
-		} else {
-			uniqueCondition.release(); // Release memory ownership
+		if (condition->unserialize(propStream)) {
+			player->storedConditionList.push_front(condition);
 		}
 		condition = Condition::createCondition(propStream);
 	}

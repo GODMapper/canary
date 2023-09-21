@@ -1,20 +1,23 @@
 local addCharm = TalkAction("/addcharms")
 
 function addCharm.onSay(player, words, param)
+	-- create log
+	logCommand(player, words, param)
+
 	local usage = "/addcharms PLAYER NAME,AMOUNT"
 	if param == "" then
 		player:sendCancelMessage("Command param required. Usage: " .. usage)
-		return false
+		return true
 	end
 	local split = param:split(",")
 	if not split[2] then
 		player:sendCancelMessage("Insufficient parameters. Usage: " .. usage)
-		return false
+		return true
 	end
 	local target = Player(split[1])
 	if not target then
 		player:sendCancelMessage("A player with that name is not online.")
-		return false
+		return true
 	end
 	--trim left
 	split[2] = split[2]:gsub("^%s*(.-)$", "%1")
@@ -135,7 +138,7 @@ function setBestiary.onSay(player, words, param)
 
 	local monsterName = split[2]
 	local mType = MonsterType(monsterName)
-	if not (mType) or (mType and mType:raceId() == 0) then
+	if not mType or (mType and mType:raceId() == 0) then
 		player:sendCancelMessage("This monster has no bestiary. Type the name exactly as in game.")
 		return true
 	end

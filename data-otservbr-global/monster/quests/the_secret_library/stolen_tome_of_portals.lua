@@ -4,7 +4,7 @@ local monster = {}
 monster.description = "a stolen tome of portals"
 monster.experience = 0
 monster.outfit = {
-	lookTypeEx = 23985
+	lookTypeEx = 23985,
 }
 
 monster.health = 10000
@@ -20,7 +20,7 @@ monster.events = {
 
 monster.changeTarget = {
 	interval = 5000,
-	chance = 8
+	chance = 8,
 }
 
 monster.strategiesTarget = {
@@ -57,8 +57,7 @@ monster.voices = {
 	chance = 10,
 }
 
-monster.loot = {
-}
+monster.loot = {}
 
 monster.defenses = {
 	defense = 33,
@@ -83,7 +82,7 @@ monster.immunities = {
 	{ type = "paralyze", condition = true },
 	{ type = "outfit", condition = false },
 	{ type = "invisible", condition = true },
-	{ type = "bleed", condition = false }
+	{ type = "bleed", condition = false },
 }
 
 mType:register(monster)

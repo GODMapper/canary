@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -23,7 +23,7 @@ public:
 	ShopBlock shopBlock;
 };
 
-class NpcType {
+class NpcType : public SharedObject {
 	struct NpcInfo {
 		LuaScriptInterface* scriptInterface;
 
@@ -66,7 +66,8 @@ class NpcType {
 		std::vector<SoundEffect_t> soundVector;
 
 		std::vector<voiceBlock_t> voiceVector;
-		std::vector<std::string> scripts;
+		// We need to keep the order of scripts, so we use a set isntead of an unordered_set
+		std::set<std::string> scripts;
 		std::vector<ShopBlock> shopItemVector;
 
 		NpcsEvent_t eventType = NPCS_EVENT_NONE;
@@ -86,7 +87,7 @@ public:
 	std::string nameDescription;
 	NpcInfo info;
 
-	void loadShop(NpcType* npcType, ShopBlock shopBlock);
+	void loadShop(const std::shared_ptr<NpcType> &npcType, ShopBlock shopBlock);
 
 	bool loadCallback(LuaScriptInterface* scriptInterface);
 	bool canSpawn(const Position &pos);
@@ -103,7 +104,7 @@ public:
 		return inject<Npcs>();
 	}
 
-	NpcType* getNpcType(const std::string &name, bool create = false);
+	std::shared_ptr<NpcType> getNpcType(const std::string &name, bool create = false);
 
 	// Reset npcs informations on reload
 	bool load(bool loadLibs = true, bool loadNpcs = true, bool reloading = false) const;
@@ -111,7 +112,7 @@ public:
 
 private:
 	std::unique_ptr<LuaScriptInterface> scriptInterface;
-	std::map<std::string, NpcType*> npcs;
+	std::map<std::string, std::shared_ptr<NpcType>> npcs;
 };
 
 constexpr auto g_npcs = Npcs::getInstance;

@@ -2,7 +2,7 @@ local mType = Game.createMonsterType("Mazoran")
 local monster = {}
 
 monster.description = "Mazoran"
-monster.experience = 50000
+monster.experience = 250000
 monster.outfit = {
 	lookType = 842,
 	lookHead = 77,
@@ -13,10 +13,13 @@ monster.outfit = {
 	lookMount = 0,
 }
 
+monster.events = {
+	"AscendantBossesDeath",
+}
+
 monster.bosstiary = {
 	bossRaceId = 1186,
 	bossRace = RARITY_ARCHFOE,
-	storageCooldown = Storage.FerumbrasAscension.MazoranTimer,
 }
 
 monster.health = 290000
@@ -44,7 +47,7 @@ monster.flags = {
 	hostile = true,
 	convinceable = false,
 	pushable = false,
-	rewardBoss = true,
+	rewardBoss = false,
 	illusionable = false,
 	canPushItems = true,
 	canPushCreatures = true,

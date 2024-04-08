@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -19,6 +19,8 @@
 class InstantSpell;
 class RuneSpell;
 class Spell;
+
+struct LuaVariant;
 
 using VocSpellMap = std::map<uint16_t, bool>;
 
@@ -44,9 +46,9 @@ public:
 
 	std::shared_ptr<InstantSpell> getInstantSpellById(uint16_t spellId);
 
-	TalkActionResult_t playerSaySpell(Player* player, std::string &words);
+	TalkActionResult_t playerSaySpell(std::shared_ptr<Player> player, std::string &words);
 
-	static Position getCasterPosition(Creature* creature, Direction dir);
+	static Position getCasterPosition(std::shared_ptr<Creature> creature, Direction dir);
 
 	std::list<uint16_t> getSpellsByVocation(uint16_t vocationId);
 
@@ -73,15 +75,15 @@ private:
 
 constexpr auto g_spells = Spells::getInstance;
 
-using RuneSpellFunction = std::function<bool(const std::shared_ptr<RuneSpell> spell, Player* player, const Position &posTo)>;
+using RuneSpellFunction = std::function<bool(const std::shared_ptr<RuneSpell> spell, std::shared_ptr<Player> player, const Position &posTo)>;
 
 class BaseSpell {
 public:
 	constexpr BaseSpell() = default;
 	virtual ~BaseSpell() = default;
 
-	virtual bool castSpell(Creature* creature) = 0;
-	virtual bool castSpell(Creature* creature, Creature* target) = 0;
+	virtual bool castSpell(std::shared_ptr<Creature> creature) = 0;
+	virtual bool castSpell(std::shared_ptr<Creature> creature, std::shared_ptr<Creature> target) = 0;
 
 	SoundEffect_t soundImpactEffect = SoundEffect_t::SILENCE;
 	SoundEffect_t soundCastEffect = SoundEffect_t::SPELL_OR_RUNE;
@@ -96,15 +98,15 @@ public:
 	CombatSpell(const CombatSpell &) = delete;
 	CombatSpell &operator=(const CombatSpell &) = delete;
 
-	bool castSpell(Creature* creature) override;
-	bool castSpell(Creature* creature, Creature* target) override;
+	bool castSpell(std::shared_ptr<Creature> creature) override;
+	bool castSpell(std::shared_ptr<Creature> creature, std::shared_ptr<Creature> target) override;
 
 	// Scripting spell
-	bool executeCastSpell(Creature* creature, const LuaVariant &var) const;
+	bool executeCastSpell(std::shared_ptr<Creature> creature, const LuaVariant &var) const;
 
 	bool loadScriptCombat();
-	std::shared_ptr<Combat> getCombat() {
-		return combat;
+	std::shared_ptr<Combat> getCombat() const {
+		return m_combat;
 	}
 
 private:
@@ -112,7 +114,7 @@ private:
 		return "onCastSpell";
 	}
 
-	std::shared_ptr<Combat> combat;
+	std::shared_ptr<Combat> m_combat;
 
 	bool needDirection;
 	bool needTarget;
@@ -128,21 +130,21 @@ public:
 	void setName(std::string n) {
 		name = std::move(n);
 	}
-	[[nodiscard]] uint16_t getId() const {
-		return spellId;
+	[[nodiscard]] uint16_t getSpellId() const {
+		return m_spellId;
 	}
-	void setId(uint16_t id) {
-		spellId = id;
+	void setSpellId(uint16_t id) {
+		m_spellId = id;
 	}
 
-	void postCastSpell(Player* player, bool finishedCast = true, bool payCost = true) const;
-	static void postCastSpell(Player* player, uint32_t manaCost, uint32_t soulCost);
+	void postCastSpell(std::shared_ptr<Player> player, bool finishedCast = true, bool payCost = true) const;
+	static void postCastSpell(std::shared_ptr<Player> player, uint32_t manaCost, uint32_t soulCost);
 	[[nodiscard]] virtual bool isInstant() const = 0;
 	[[nodiscard]] bool isLearnable() const {
 		return learnable;
 	}
 
-	uint32_t getManaCost(const Player* player) const;
+	uint32_t getManaCost(std::shared_ptr<Player> player) const;
 	[[nodiscard]] uint32_t getSoulCost() const {
 		return soul;
 	}
@@ -189,8 +191,14 @@ public:
 	[[nodiscard]] const VocSpellMap &getVocMap() const {
 		return vocSpellMap;
 	}
-	void addVocMap(uint16_t n, bool b) {
-		vocSpellMap[n] = b;
+	void addVocMap(uint16_t vocationId, bool b) {
+		if (vocationId == 0XFFFF) {
+			g_logger().error("Vocation overflow for spell: {}", getName());
+			return;
+		}
+
+		g_logger().trace("Adding spell: {} to voc id: {}", getName(), vocationId);
+		vocSpellMap[vocationId] = b;
 	}
 
 	SpellGroup_t getGroup() {
@@ -338,10 +346,10 @@ public:
 	}
 
 protected:
-	void applyCooldownConditions(Player* player) const;
-	bool playerSpellCheck(Player* player) const;
-	bool playerInstantSpellCheck(Player* player, const Position &toPos) const;
-	bool playerRuneSpellCheck(Player* player, const Position &toPos);
+	void applyCooldownConditions(std::shared_ptr<Player> player) const;
+	bool playerSpellCheck(std::shared_ptr<Player> player) const;
+	bool playerInstantSpellCheck(std::shared_ptr<Player> player, const Position &toPos) const;
+	bool playerRuneSpellCheck(std::shared_ptr<Player> player, const Position &toPos);
 
 	VocSpellMap vocSpellMap;
 
@@ -355,7 +363,7 @@ protected:
 	uint32_t magLevel = 0;
 	int32_t range = -1;
 
-	uint16_t spellId = 0;
+	uint16_t m_spellId = 0;
 
 	bool selfTarget = false;
 	bool needTarget = false;
@@ -388,13 +396,13 @@ class InstantSpell final : public Script, public Spell {
 public:
 	using Script::Script;
 
-	virtual bool playerCastInstant(Player* player, std::string &param);
+	virtual bool playerCastInstant(std::shared_ptr<Player> player, std::string &param);
 
-	bool castSpell(Creature* creature) override;
-	bool castSpell(Creature* creature, Creature* target) override;
+	bool castSpell(std::shared_ptr<Creature> creature) override;
+	bool castSpell(std::shared_ptr<Creature> creature, std::shared_ptr<Creature> target) override;
 
 	// Scripting spell
-	bool executeCastSpell(Creature* creature, const LuaVariant &var) const;
+	bool executeCastSpell(std::shared_ptr<Creature> creature, const LuaVariant &var) const;
 
 	[[nodiscard]] bool isInstant() const override {
 		return true;
@@ -429,8 +437,8 @@ public:
 	void setBlockWalls(bool w) {
 		checkLineOfSight = w;
 	}
-	bool canCast(const Player* player) const;
-	bool canThrowSpell(const Creature* creature, const Creature* target) const;
+	bool canCast(std::shared_ptr<Player> player) const;
+	bool canThrowSpell(std::shared_ptr<Creature> creature, std::shared_ptr<Creature> target) const;
 
 private:
 	[[nodiscard]] std::string getScriptTypeName() const override {
@@ -448,21 +456,21 @@ class RuneSpell final : public Action, public Spell {
 public:
 	using Action::Action;
 
-	ReturnValue canExecuteAction(const Player* player, const Position &toPos) override;
+	ReturnValue canExecuteAction(std::shared_ptr<Player> player, const Position &toPos) override;
 	bool hasOwnErrorHandler() override {
 		return true;
 	}
-	Thing* getTarget(Player*, Creature* targetCreature, const Position &, uint8_t) const override {
+	std::shared_ptr<Thing> getTarget(std::shared_ptr<Player>, std::shared_ptr<Creature> targetCreature, const Position &, uint8_t) const override {
 		return targetCreature;
 	}
 
-	bool executeUse(Player* player, Item* item, const Position &fromPosition, Thing* target, const Position &toPosition, bool isHotkey) override;
+	bool executeUse(std::shared_ptr<Player> player, std::shared_ptr<Item> item, const Position &fromPosition, std::shared_ptr<Thing> target, const Position &toPosition, bool isHotkey) override;
 
-	bool castSpell(Creature* creature) override;
-	bool castSpell(Creature* creature, Creature* target) override;
+	bool castSpell(std::shared_ptr<Creature> creature) override;
+	bool castSpell(std::shared_ptr<Creature> creature, std::shared_ptr<Creature> target) override;
 
 	// Scripting spell
-	bool executeCastSpell(Creature* creature, const LuaVariant &var, bool isHotkey) const;
+	bool executeCastSpell(std::shared_ptr<Creature> creature, const LuaVariant &var, bool isHotkey) const;
 
 	[[nodiscard]] bool isInstant() const override {
 		return false;
@@ -488,7 +496,7 @@ private:
 		return "onCastSpell";
 	}
 
-	bool internalCastSpell(Creature* creature, const LuaVariant &var, bool isHotkey);
+	bool internalCastSpell(std::shared_ptr<Creature> creature, const LuaVariant &var, bool isHotkey);
 
 	uint16_t runeId = 0;
 	uint32_t charges = 0;

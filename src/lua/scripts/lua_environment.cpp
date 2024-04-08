@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -13,15 +13,17 @@
 #include "lua/scripts/lua_environment.hpp"
 #include "lua/functions/lua_functions_loader.hpp"
 #include "lua/scripts/script_environment.hpp"
+#include "lua/global/lua_timer_event_descr.hpp"
 
 bool LuaEnvironment::shuttingDown = false;
+
+static const std::unique_ptr<AreaCombat> &AreaCombatNull {};
 
 LuaEnvironment::LuaEnvironment() :
 	LuaScriptInterface("Main Interface") { }
 
 LuaEnvironment::~LuaEnvironment() {
 	if (!testInterface) {
-		delete testInterface;
 	}
 
 	LuaEnvironment::shuttingDown = true;
@@ -118,16 +120,16 @@ void LuaEnvironment::clearCombatObjects(LuaScriptInterface* interface) {
 	combatMap.clear();
 }
 
-AreaCombat* LuaEnvironment::getAreaObject(uint32_t id) const {
+const std::unique_ptr<AreaCombat> &LuaEnvironment::getAreaObject(uint32_t id) const {
 	auto it = areaMap.find(id);
 	if (it == areaMap.end()) {
-		return nullptr;
+		return AreaCombatNull;
 	}
 	return it->second;
 }
 
 uint32_t LuaEnvironment::createAreaObject(LuaScriptInterface* interface) {
-	areaMap[++lastAreaId] = new AreaCombat;
+	areaMap[++lastAreaId] = std::make_unique<AreaCombat>();
 	areaIdMap[interface].push_back(lastAreaId);
 	return lastAreaId;
 }
@@ -141,7 +143,6 @@ void LuaEnvironment::clearAreaObjects(LuaScriptInterface* interface) {
 	for (uint32_t id : it->second) {
 		auto itt = areaMap.find(id);
 		if (itt != areaMap.end()) {
-			delete itt->second;
 			areaMap.erase(itt);
 		}
 	}
@@ -181,5 +182,21 @@ void LuaEnvironment::executeTimerEvent(uint32_t eventIndex) {
 	luaL_unref(luaState, LUA_REGISTRYINDEX, timerEventDesc.function);
 	for (auto parameter : timerEventDesc.parameters) {
 		luaL_unref(luaState, LUA_REGISTRYINDEX, parameter);
+	}
+}
+
+void LuaEnvironment::collectGarbage() const {
+	// prevents recursive collects
+	static bool collecting = false;
+	if (!collecting) {
+		collecting = true;
+
+		// we must collect two times because __gc metamethod
+		// is called on uservalues only the second time
+		for (int i = -1; ++i < 2;) {
+			lua_gc(luaState, LUA_GCCOLLECT, 0);
+		}
+
+		collecting = false;
 	}
 }

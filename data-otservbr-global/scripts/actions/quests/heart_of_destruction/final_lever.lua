@@ -69,9 +69,10 @@ local function changeArea()
 						local creatures = tile:getCreatures()
 						if creatures and #creatures > 0 then
 							if theHungerKilled == false then
-								for _, c in pairs(creatures) do
-									if isMonster(c) then
-										c:teleportTo({ x = 32244, y = 31369, z = 14 })
+								for _, creature in pairs(creatures) do
+									local monster = Monster(creature)
+									if monster then
+										monster:teleportTo({ x = 32244, y = 31369, z = 14 })
 									end
 								end
 							else
@@ -97,9 +98,10 @@ local function changeArea()
 						local creatures = tile:getCreatures()
 						if creatures and #creatures > 0 then
 							if theDestructionKilled == false then
-								for _, c in pairs(creatures) do
-									if isMonster(c) then
-										c:teleportTo({ x = 32271, y = 31313, z = 14 })
+								for _, creature in pairs(creatures) do
+									local monster = Monster(creature)
+									if monster then
+										monster:teleportTo({ x = 32271, y = 31313, z = 14 })
 									end
 								end
 							else
@@ -125,9 +127,10 @@ local function changeArea()
 						local creatures = tile:getCreatures()
 						if creatures and #creatures > 0 then
 							if theRageKilled == false then
-								for _, c in pairs(creatures) do
-									if isMonster(c) then
-										c:teleportTo({ x = 32299, y = 31369, z = 14 })
+								for _, creature in pairs(creatures) do
+									local monster = Monster(creature)
+									if monster then
+										monster:teleportTo({ x = 32299, y = 31369, z = 14 })
 									end
 								end
 							else
@@ -418,7 +421,7 @@ function heartDestructionFinal.onUse(player, item, fromPosition, itemEx, toPosit
 						teamHunger = storeHunger[i]
 						config.hungerPositions[i]:sendMagicEffect(CONST_ME_POFF)
 						teamHunger:teleportTo(config.hungerNewPos)
-						teamHunger:setStorageValue(14333, os.time() + 7 * 24 * 60 * 60)
+						teamHunger:setBossCooldown("World Devourer", os.time() + 7 * 24 * 60 * 60)
 						teamHunger:setStorageValue(14334, 1) --storage Hunger
 						teamHunger:registerEvent("DevourerStorage")
 					end
@@ -427,7 +430,7 @@ function heartDestructionFinal.onUse(player, item, fromPosition, itemEx, toPosit
 						teamDestruction = storeDestruction[i]
 						config.destructionPositions[i]:sendMagicEffect(CONST_ME_POFF)
 						teamDestruction:teleportTo(config.destructionNewPos)
-						teamDestruction:setStorageValue(14333, os.time() + 7 * 24 * 60 * 60)
+						teamDestruction:setBossCooldown("World Devourer", os.time() + 7 * 24 * 60 * 60)
 						teamDestruction:setStorageValue(14335, 1) --storage Destruction
 						teamDestruction:registerEvent("DevourerStorage")
 					end
@@ -436,7 +439,7 @@ function heartDestructionFinal.onUse(player, item, fromPosition, itemEx, toPosit
 						teamRage = storeRage[i]
 						config.ragePositions[i]:sendMagicEffect(CONST_ME_POFF)
 						teamRage:teleportTo(config.rageNewPos)
-						teamRage:setStorageValue(14333, os.time() + 7 * 24 * 60 * 60)
+						teamRage:setBossCooldown("World Devourer", os.time() + 7 * 24 * 60 * 60)
 						teamRage:setStorageValue(14336, 1) --storage Rage
 						teamRage:registerEvent("DevourerStorage")
 					end

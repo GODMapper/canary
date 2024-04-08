@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -14,7 +14,7 @@
 class ConditionFunctions final : LuaScriptInterface {
 public:
 	static void init(lua_State* L) {
-		registerClass(L, "Condition", "", ConditionFunctions::luaConditionCreate);
+		registerSharedClass(L, "Condition", "", ConditionFunctions::luaConditionCreate);
 		registerMetaMethod(L, "Condition", "__eq", ConditionFunctions::luaUserdataCompare);
 		registerMetaMethod(L, "Condition", "__gc", ConditionFunctions::luaConditionDelete);
 		registerMethod(L, "Condition", "delete", ConditionFunctions::luaConditionDelete);

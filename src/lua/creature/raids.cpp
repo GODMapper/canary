@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -12,7 +12,7 @@
 #include "lua/creature/raids.hpp"
 #include "utils/pugicast.hpp"
 #include "game/game.hpp"
-#include "game/scheduling/scheduler.hpp"
+#include "game/scheduling/dispatcher.hpp"
 #include "creatures/monsters/monster.hpp"
 #include "server/network/webhook/webhook.hpp"
 
@@ -21,12 +21,12 @@ Raids::Raids() {
 }
 
 bool Raids::loadFromXml() {
-	if (isLoaded()) {
+	if (g_configManager().getBoolean(DISABLE_LEGACY_RAIDS, __FUNCTION__) || isLoaded()) {
 		return true;
 	}
 
 	pugi::xml_document doc;
-	auto folder = g_configManager().getString(DATA_DIRECTORY) + "/raids/raids.xml";
+	auto folder = g_configManager().getString(DATA_DIRECTORY, __FUNCTION__) + "/raids/raids.xml";
 	pugi::xml_parse_result result = doc.load_file(folder.c_str());
 	if (!result) {
 		printXMLError(__FUNCTION__, folder, result);
@@ -82,7 +82,7 @@ bool Raids::loadFromXml() {
 		}
 
 		auto newRaid = std::make_shared<Raid>(name, interval, margin, repeat);
-		if (newRaid->loadFromXml(g_configManager().getString(DATA_DIRECTORY) + "/raids/" + file)) {
+		if (newRaid->loadFromXml(g_configManager().getString(DATA_DIRECTORY, __FUNCTION__) + "/raids/" + file)) {
 			raidList.push_back(newRaid);
 		} else {
 			g_logger().error("{} - Failed to load raid: {}", __FUNCTION__, name);
@@ -96,19 +96,24 @@ bool Raids::loadFromXml() {
 static constexpr int32_t MAX_RAND_RANGE = 10000000;
 
 bool Raids::startup() {
-	if (!isLoaded() || isStarted()) {
+	if (!isLoaded() || isStarted() || g_configManager().getBoolean(DISABLE_LEGACY_RAIDS, __FUNCTION__)) {
 		return false;
 	}
 
 	setLastRaidEnd(OTSYS_TIME());
 
-	checkRaidsEvent = g_scheduler().addEvent(CHECK_RAIDS_INTERVAL * 1000, std::bind(&Raids::checkRaids, this), "Raids::checkRaids");
+	checkRaidsEvent = g_dispatcher().scheduleEvent(
+		CHECK_RAIDS_INTERVAL * 1000, [this] { checkRaids(); }, "Raids::checkRaids"
+	);
 
 	started = true;
 	return started;
 }
 
 void Raids::checkRaids() {
+	if (g_configManager().getBoolean(DISABLE_LEGACY_RAIDS, __FUNCTION__)) {
+		return;
+	}
 	if (!getRunning()) {
 		uint64_t now = OTSYS_TIME();
 
@@ -131,11 +136,13 @@ void Raids::checkRaids() {
 		}
 	}
 
-	checkRaidsEvent = g_scheduler().addEvent(CHECK_RAIDS_INTERVAL * 1000, std::bind(&Raids::checkRaids, this), "Raids::checkRaids");
+	checkRaidsEvent = g_dispatcher().scheduleEvent(
+		CHECK_RAIDS_INTERVAL * 1000, [this] { checkRaids(); }, "Raids::checkRaids"
+	);
 }
 
 void Raids::clear() {
-	g_scheduler().stopEvent(checkRaidsEvent);
+	g_dispatcher().stopEvent(checkRaidsEvent);
 	checkRaidsEvent = 0;
 
 	for (const auto &raid : raidList) {
@@ -210,10 +217,12 @@ bool Raid::loadFromXml(const std::string &filename) {
 }
 
 void Raid::startRaid() {
-	const auto &raidEvent = getNextRaidEvent();
+	const auto raidEvent = getNextRaidEvent();
 	if (raidEvent) {
 		state = RAIDSTATE_EXECUTING;
-		nextEventEvent = g_scheduler().addEvent(raidEvent->getDelay(), std::bind(&Raid::executeRaidEvent, this, raidEvent), "Raid::executeRaidEvent");
+		nextEventEvent = g_dispatcher().scheduleEvent(
+			raidEvent->getDelay(), [this, raidEvent] { executeRaidEvent(raidEvent); }, "Raid::executeRaidEvent"
+		);
 	} else {
 		g_logger().warn("[raids] Raid {} has no events", name);
 		resetRaid();
@@ -223,11 +232,13 @@ void Raid::startRaid() {
 void Raid::executeRaidEvent(const std::shared_ptr<RaidEvent> raidEvent) {
 	if (raidEvent->executeEvent()) {
 		nextEvent++;
-		const auto &newRaidEvent = getNextRaidEvent();
+		const auto newRaidEvent = getNextRaidEvent();
 
 		if (newRaidEvent) {
 			uint32_t ticks = static_cast<uint32_t>(std::max<int32_t>(RAID_MINTICKS, newRaidEvent->getDelay() - raidEvent->getDelay()));
-			nextEventEvent = g_scheduler().addEvent(ticks, std::bind(&Raid::executeRaidEvent, this, newRaidEvent), __FUNCTION__);
+			nextEventEvent = g_dispatcher().scheduleEvent(
+				ticks, [this, newRaidEvent] { executeRaidEvent(newRaidEvent); }, __FUNCTION__
+			);
 		} else {
 			resetRaid();
 		}
@@ -245,7 +256,7 @@ void Raid::resetRaid() {
 
 void Raid::stopEvents() {
 	if (nextEventEvent != 0) {
-		g_scheduler().stopEvent(nextEventEvent);
+		g_dispatcher().stopEvent(nextEventEvent);
 		nextEventEvent = 0;
 	}
 }
@@ -316,7 +327,7 @@ bool AnnounceEvent::configureRaidEvent(const pugi::xml_node &eventNode) {
 
 bool AnnounceEvent::executeEvent() {
 	g_game().broadcastMessage(message, messageType);
-	g_webhook().sendMessage("Incoming raid!", message, WEBHOOK_COLOR_RAID);
+	g_webhook().sendMessage(fmt::format(":space_invader: {}", message));
 	return true;
 }
 
@@ -365,14 +376,13 @@ bool SingleSpawnEvent::configureRaidEvent(const pugi::xml_node &eventNode) {
 }
 
 bool SingleSpawnEvent::executeEvent() {
-	Monster* monster = Monster::createMonster(monsterName);
+	std::shared_ptr<Monster> monster = Monster::createMonster(monsterName);
 	if (!monster) {
 		g_logger().error("{} - Cant create monster {}", __FUNCTION__, monsterName);
 		return false;
 	}
 
 	if (!g_game().placeCreature(monster, position, false, true)) {
-		delete monster;
 		g_logger().error("{} - Cant create monster {}", __FUNCTION__, monsterName);
 		return false;
 	}
@@ -529,7 +539,7 @@ bool AreaSpawnEvent::executeEvent() {
 	for (const MonsterSpawn &spawn : spawnMonsterList) {
 		uint32_t amount = uniform_random(spawn.minAmount, spawn.maxAmount);
 		for (uint32_t i = 0; i < amount; ++i) {
-			Monster* monster = Monster::createMonster(spawn.name);
+			std::shared_ptr<Monster> monster = Monster::createMonster(spawn.name);
 			if (!monster) {
 				g_logger().error("{} - Can't create monster {}", __FUNCTION__, spawn.name);
 				return false;
@@ -537,8 +547,8 @@ bool AreaSpawnEvent::executeEvent() {
 
 			bool success = false;
 			for (int32_t tries = 0; tries < MAXIMUM_TRIES_PER_MONSTER; tries++) {
-				const Tile* tile = g_game().map.getTile(static_cast<uint16_t>(uniform_random(fromPos.x, toPos.x)), static_cast<uint16_t>(uniform_random(fromPos.y, toPos.y)), static_cast<uint8_t>(uniform_random(fromPos.z, toPos.z)));
-				if (tile && !tile->isMoveableBlocking() && !tile->hasFlag(TILESTATE_PROTECTIONZONE) && tile->getTopCreature() == nullptr && g_game().placeCreature(monster, tile->getPosition(), false, true)) {
+				std::shared_ptr<Tile> tile = g_game().map.getTile(static_cast<uint16_t>(uniform_random(fromPos.x, toPos.x)), static_cast<uint16_t>(uniform_random(fromPos.y, toPos.y)), static_cast<uint8_t>(uniform_random(fromPos.z, toPos.z)));
+				if (tile && !tile->isMovableBlocking() && !tile->hasFlag(TILESTATE_PROTECTIONZONE) && tile->getTopCreature() == nullptr && g_game().placeCreature(monster, tile->getPosition(), false, true)) {
 					success = true;
 					monster->setForgeMonster(false);
 					break;
@@ -546,7 +556,6 @@ bool AreaSpawnEvent::executeEvent() {
 			}
 
 			if (!success) {
-				delete monster;
 			}
 		}
 	}
@@ -568,7 +577,7 @@ bool ScriptEvent::configureRaidEvent(const pugi::xml_node &eventNode) {
 
 	std::string scriptName = std::string(scriptAttribute.as_string());
 
-	if (!loadScript(g_configManager().getString(DATA_DIRECTORY) + "/raids/scripts/" + scriptName, scriptName)) {
+	if (!loadScript(g_configManager().getString(DATA_DIRECTORY, __FUNCTION__) + "/raids/scripts/" + scriptName, scriptName)) {
 		g_logger().error("[{}] can not load raid script: {}", __FUNCTION__, scriptName);
 		return false;
 	}

@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -24,7 +24,7 @@ int CreatureEventFunctions::luaCreateCreatureEvent(lua_State* L) {
 
 int CreatureEventFunctions::luaCreatureEventType(lua_State* L) {
 	// creatureevent:type(callback)
-	const auto &creatureEvent = getUserdataShared<CreatureEvent>(L, 1);
+	const auto creatureEvent = getUserdataShared<CreatureEvent>(L, 1);
 	if (creatureEvent) {
 		std::string typeName = getString(L, 2);
 		std::string tmpStr = asLowerCaseString(typeName);

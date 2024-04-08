@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -42,8 +42,8 @@ bool MonsterType::canSpawn(const Position &pos) {
 	return canSpawn;
 }
 
-ConditionDamage* Monsters::getDamageCondition(ConditionType_t conditionType, int32_t maxDamage, int32_t minDamage, int32_t startDamage, uint32_t tickInterval) {
-	ConditionDamage* condition = static_cast<ConditionDamage*>(Condition::createCondition(CONDITIONID_COMBAT, conditionType, 0, 0));
+std::shared_ptr<ConditionDamage> Monsters::getDamageCondition(ConditionType_t conditionType, int32_t maxDamage, int32_t minDamage, int32_t startDamage, uint32_t tickInterval) {
+	std::shared_ptr<ConditionDamage> condition = Condition::createCondition(CONDITIONID_COMBAT, conditionType, 0, 0)->static_self_cast<ConditionDamage>();
 	condition->setParam(CONDITION_PARAM_TICKINTERVAL, tickInterval);
 	condition->setParam(CONDITION_PARAM_MINVALUE, minDamage);
 	condition->setParam(CONDITION_PARAM_MAXVALUE, maxDamage);
@@ -83,7 +83,7 @@ bool Monsters::deserializeSpell(const std::shared_ptr<MonsterSpell> spell, spell
 	if (spell->length > 0) {
 		spell->spread = std::max<int32_t>(0, spell->spread);
 
-		AreaCombat* area = new AreaCombat();
+		auto area = std::make_unique<AreaCombat>();
 		area->setupArea(spell->length, spell->spread);
 		combatPtr->setArea(area);
 
@@ -91,7 +91,7 @@ bool Monsters::deserializeSpell(const std::shared_ptr<MonsterSpell> spell, spell
 	}
 
 	if (spell->radius > 0) {
-		AreaCombat* area = new AreaCombat();
+		auto area = std::make_unique<AreaCombat>();
 		area->setupArea(spell->radius);
 		combatPtr->setArea(area);
 	}
@@ -143,8 +143,9 @@ bool Monsters::deserializeSpell(const std::shared_ptr<MonsterSpell> spell, spell
 			conditionType = CONDITION_PARALYZE;
 		}
 
-		ConditionSpeed* condition = static_cast<ConditionSpeed*>(Condition::createCondition(CONDITIONID_COMBAT, conditionType, duration, 0));
-		condition->setFormulaVars(speedChange / 1000.0, 0, speedChange / 1000.0, 0);
+		std::shared_ptr<ConditionSpeed> condition = Condition::createCondition(CONDITIONID_COMBAT, conditionType, duration, 0)->static_self_cast<ConditionSpeed>();
+		float multiplier = 1.0f + static_cast<float>(speedChange) / 1000.0f;
+		condition->setFormulaVars(multiplier / 2, 40, multiplier, 40);
 		combatPtr->addCondition(condition);
 	} else if (spellName == "outfit") {
 		int32_t duration = 10000;
@@ -153,7 +154,7 @@ bool Monsters::deserializeSpell(const std::shared_ptr<MonsterSpell> spell, spell
 			duration = spell->duration;
 		}
 
-		ConditionOutfit* condition = static_cast<ConditionOutfit*>(Condition::createCondition(CONDITIONID_COMBAT, CONDITION_OUTFIT, duration, 0));
+		std::shared_ptr<ConditionOutfit> condition = Condition::createCondition(CONDITIONID_COMBAT, CONDITION_OUTFIT, duration, 0)->static_self_cast<ConditionOutfit>();
 
 		if (spell->outfitMonster != "") {
 			condition->setLazyMonsterOutfit(spell->outfitMonster);
@@ -177,7 +178,7 @@ bool Monsters::deserializeSpell(const std::shared_ptr<MonsterSpell> spell, spell
 			duration = spell->duration;
 		}
 
-		Condition* condition = Condition::createCondition(CONDITIONID_COMBAT, CONDITION_INVISIBLE, duration, 0);
+		std::shared_ptr<Condition> condition = Condition::createCondition(CONDITIONID_COMBAT, CONDITION_INVISIBLE, duration, 0);
 		combatPtr->setParam(COMBAT_PARAM_AGGRESSIVE, 0);
 		combatPtr->addCondition(condition);
 	} else if (spellName == "drunk") {
@@ -187,7 +188,7 @@ bool Monsters::deserializeSpell(const std::shared_ptr<MonsterSpell> spell, spell
 			duration = spell->duration;
 		}
 
-		Condition* condition = Condition::createCondition(CONDITIONID_COMBAT, CONDITION_DRUNK, duration, 0);
+		std::shared_ptr<Condition> condition = Condition::createCondition(CONDITIONID_COMBAT, CONDITION_DRUNK, duration, 0);
 		combatPtr->addCondition(condition);
 	} else if (spellName == "soulwars fear" || spellName == "fear") {
 		int32_t duration = 6000;
@@ -247,7 +248,7 @@ bool Monsters::deserializeSpell(const std::shared_ptr<MonsterSpell> spell, spell
 			maxDamage = minDamage;
 		}
 
-		Condition* condition = getDamageCondition(spell->conditionType, maxDamage, minDamage, startDamage, tickInterval);
+		std::shared_ptr<Condition> condition = getDamageCondition(spell->conditionType, maxDamage, minDamage, startDamage, tickInterval);
 		combatPtr->addCondition(condition);
 	}
 
@@ -291,7 +292,7 @@ bool MonsterType::loadCallback(LuaScriptInterface* scriptInterface) {
 	return true;
 }
 
-std::shared_ptr<MonsterType> Monsters::getMonsterType(const std::string &name) {
+std::shared_ptr<MonsterType> Monsters::getMonsterType(const std::string &name, bool silent /* = false*/) const {
 	std::string lowerCaseName = asLowerCaseString(name);
 	if (auto it = monsters.find(lowerCaseName);
 		it != monsters.end()
@@ -299,7 +300,9 @@ std::shared_ptr<MonsterType> Monsters::getMonsterType(const std::string &name) {
 		&& it->first.find(lowerCaseName) != it->first.npos) {
 		return it->second;
 	}
-	g_logger().error("[Monsters::getMonsterType] - Monster with name {} not exist", lowerCaseName);
+	if (!silent) {
+		g_logger().error("[Monsters::getMonsterType] - Monster with name {} not exist", lowerCaseName);
+	}
 	return nullptr;
 }
 

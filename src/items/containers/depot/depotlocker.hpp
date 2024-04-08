@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -16,14 +16,11 @@ class DepotLocker final : public Container {
 public:
 	explicit DepotLocker(uint16_t type, uint16_t size);
 
-	DepotLocker* getDepotLocker() override {
-		return this;
-	}
-	const DepotLocker* getDepotLocker() const override {
-		return this;
+	std::shared_ptr<DepotLocker> getDepotLocker() override {
+		return static_self_cast<DepotLocker>();
 	}
 
-	void removeInbox(Inbox* inbox);
+	void removeInbox(std::shared_ptr<Inbox> inbox);
 
 	// serialization
 	Attr_ReadValue readAttr(AttrTypes_t attr, PropStream &propStream) override;
@@ -36,15 +33,15 @@ public:
 	}
 
 	// cylinder implementations
-	ReturnValue queryAdd(int32_t index, const Thing &thing, uint32_t count, uint32_t flags, Creature* actor = nullptr) const override;
+	ReturnValue queryAdd(int32_t index, const std::shared_ptr<Thing> &thing, uint32_t count, uint32_t flags, std::shared_ptr<Creature> actor = nullptr) override;
 
-	void postAddNotification(Thing* thing, const Cylinder* oldParent, int32_t index, CylinderLink_t link = LINK_OWNER) override;
-	void postRemoveNotification(Thing* thing, const Cylinder* newParent, int32_t index, CylinderLink_t link = LINK_OWNER) override;
+	void postAddNotification(std::shared_ptr<Thing> thing, std::shared_ptr<Cylinder> oldParent, int32_t index, CylinderLink_t link = LINK_OWNER) override;
+	void postRemoveNotification(std::shared_ptr<Thing> thing, std::shared_ptr<Cylinder> newParent, int32_t index, CylinderLink_t link = LINK_OWNER) override;
 
 	bool canRemove() const override {
 		return false;
 	}
-	bool isRemoved() const override {
+	bool isRemoved() override {
 		return false;
 	}
 

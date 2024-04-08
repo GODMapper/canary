@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -78,7 +78,7 @@ Module* Modules::getEventByRecvbyte(uint8_t recvbyte, bool force) {
 }
 
 void Modules::executeOnRecvbyte(uint32_t playerId, NetworkMessage &msg, uint8_t byte) const {
-	Player* player = g_game().getPlayerByID(playerId);
+	std::shared_ptr<Player> player = g_game().getPlayerByID(playerId);
 	if (!player) {
 		return;
 	}
@@ -152,7 +152,7 @@ void Module::clearEvent() {
 	loaded = false;
 }
 
-void Module::executeOnRecvbyte(Player* player, NetworkMessage &msg) {
+void Module::executeOnRecvbyte(std::shared_ptr<Player> player, NetworkMessage &msg) {
 	// onRecvbyte(player, msg, recvbyte)
 	if (!scriptInterface->reserveScriptEnv()) {
 		g_logger().error("Call stack overflow. Too many lua script calls being nested {}", player->getName());
@@ -168,7 +168,7 @@ void Module::executeOnRecvbyte(Player* player, NetworkMessage &msg) {
 	LuaScriptInterface::pushUserdata<Player>(L, player);
 	LuaScriptInterface::setMetatable(L, -1, "Player");
 
-	LuaScriptInterface::pushUserdata<NetworkMessage>(L, &msg);
+	LuaScriptInterface::pushUserdata<NetworkMessage>(L, std::shared_ptr<NetworkMessage>(&msg));
 	LuaScriptInterface::setWeakMetatable(L, -1, "NetworkMessage");
 
 	lua_pushnumber(L, recvbyte);

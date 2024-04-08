@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -14,7 +14,7 @@
 class TileFunctions final : LuaScriptInterface {
 public:
 	static void init(lua_State* L) {
-		registerClass(L, "Tile", "", TileFunctions::luaTileCreate);
+		registerSharedClass(L, "Tile", "", TileFunctions::luaTileCreate);
 		registerMetaMethod(L, "Tile", "__eq", TileFunctions::luaUserdataCompare);
 
 		registerMethod(L, "Tile", "getPosition", TileFunctions::luaTileGetPosition);
@@ -55,6 +55,7 @@ public:
 		registerMethod(L, "Tile", "addItemEx", TileFunctions::luaTileAddItemEx);
 
 		registerMethod(L, "Tile", "getHouse", TileFunctions::luaTileGetHouse);
+		registerMethod(L, "Tile", "sweep", TileFunctions::luaTileSweep);
 	}
 
 private:
@@ -98,4 +99,5 @@ private:
 	static int luaTileAddItemEx(lua_State* L);
 
 	static int luaTileGetHouse(lua_State* L);
+	static int luaTileSweep(lua_State* L);
 };

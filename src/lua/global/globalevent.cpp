@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -12,16 +12,16 @@
 #include "lua/global/globalevent.hpp"
 #include "utils/tools.hpp"
 #include "game/game.hpp"
-#include "game/scheduling/scheduler.hpp"
+#include "game/scheduling/dispatcher.hpp"
 
 GlobalEvents::GlobalEvents() = default;
 GlobalEvents::~GlobalEvents() = default;
 
 void GlobalEvents::clear() {
 	// Stop events
-	g_scheduler().stopEvent(thinkEventId);
+	g_dispatcher().stopEvent(thinkEventId);
 	thinkEventId = 0;
-	g_scheduler().stopEvent(timerEventId);
+	g_dispatcher().stopEvent(timerEventId);
 	timerEventId = 0;
 
 	// Clear maps
@@ -35,7 +35,9 @@ bool GlobalEvents::registerLuaEvent(const std::shared_ptr<GlobalEvent> globalEve
 		auto result = timerMap.emplace(globalEvent->getName(), globalEvent);
 		if (result.second) {
 			if (timerEventId == 0) {
-				timerEventId = g_scheduler().addEvent(SCHEDULER_MINTICKS, std::bind(&GlobalEvents::timer, this), "GlobalEvents::timer");
+				timerEventId = g_dispatcher().scheduleEvent(
+					SCHEDULER_MINTICKS, [this] { timer(); }, "GlobalEvents::timer"
+				);
 			}
 			return true;
 		}
@@ -48,7 +50,7 @@ bool GlobalEvents::registerLuaEvent(const std::shared_ptr<GlobalEvent> globalEve
 		auto result = thinkMap.emplace(globalEvent->getName(), globalEvent);
 		if (result.second) {
 			if (thinkEventId == 0) {
-				thinkEventId = g_scheduler().addEvent(
+				thinkEventId = g_dispatcher().scheduleEvent(
 					SCHEDULER_MINTICKS, [this] { think(); }, "GlobalEvents::think"
 				);
 			}
@@ -71,7 +73,7 @@ void GlobalEvents::timer() {
 
 	auto it = timerMap.begin();
 	while (it != timerMap.end()) {
-		const auto &globalEvent = it->second;
+		const auto globalEvent = it->second;
 
 		int64_t nextExecutionTime = globalEvent->getNextExecution() - now;
 		if (nextExecutionTime > 0) {
@@ -99,7 +101,9 @@ void GlobalEvents::timer() {
 	}
 
 	if (nextScheduledTime != std::numeric_limits<int64_t>::max()) {
-		timerEventId = g_scheduler().addEvent(std::max<int64_t>(1000, nextScheduledTime * 1000), std::bind(&GlobalEvents::timer, this), __FUNCTION__);
+		timerEventId = g_dispatcher().scheduleEvent(
+			std::max<int64_t>(1000, nextScheduledTime * 1000), [this] { timer(); }, __FUNCTION__
+		);
 	}
 }
 
@@ -108,7 +112,7 @@ void GlobalEvents::think() {
 
 	int64_t nextScheduledTime = std::numeric_limits<int64_t>::max();
 	for (auto &it : thinkMap) {
-		const auto &globalEvent = it.second;
+		const auto globalEvent = it.second;
 
 		int64_t nextExecutionTime = globalEvent->getNextExecution() - now;
 		if (nextExecutionTime > 0) {
@@ -136,13 +140,15 @@ void GlobalEvents::think() {
 
 	if (nextScheduledTime != std::numeric_limits<int64_t>::max()) {
 		auto delay = static_cast<uint32_t>(nextScheduledTime);
-		thinkEventId = g_scheduler().addEvent(delay, std::bind(&GlobalEvents::think, this), "GlobalEvents::think");
+		thinkEventId = g_dispatcher().scheduleEvent(
+			delay, [this] { think(); }, "GlobalEvents::think"
+		);
 	}
 }
 
 void GlobalEvents::execute(GlobalEvent_t type) const {
 	for (const auto &it : serverMap) {
-		const auto &globalEvent = it.second;
+		const auto globalEvent = it.second;
 		if (globalEvent->getEventType() == type) {
 			globalEvent->executeEvent();
 		}

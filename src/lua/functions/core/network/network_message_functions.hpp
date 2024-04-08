@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -14,10 +14,9 @@
 class NetworkMessageFunctions final : LuaScriptInterface {
 public:
 	static void init(lua_State* L) {
-		registerClass(L, "NetworkMessage", "", NetworkMessageFunctions::luaNetworkMessageCreate);
+		registerSharedClass(L, "NetworkMessage", "", NetworkMessageFunctions::luaNetworkMessageCreate);
 		registerMetaMethod(L, "NetworkMessage", "__eq", NetworkMessageFunctions::luaUserdataCompare);
-		registerMetaMethod(L, "NetworkMessage", "__gc", NetworkMessageFunctions::luaNetworkMessageDelete);
-		registerMethod(L, "NetworkMessage", "delete", NetworkMessageFunctions::luaNetworkMessageDelete);
+		registerMethod(L, "NetworkMessage", "delete", luaGarbageCollection);
 
 		registerMethod(L, "NetworkMessage", "getByte", NetworkMessageFunctions::luaNetworkMessageGetByte);
 		registerMethod(L, "NetworkMessage", "getU16", NetworkMessageFunctions::luaNetworkMessageGetU16);
@@ -46,7 +45,6 @@ public:
 
 private:
 	static int luaNetworkMessageCreate(lua_State* L);
-	static int luaNetworkMessageDelete(lua_State* L);
 
 	static int luaNetworkMessageGetByte(lua_State* L);
 	static int luaNetworkMessageGetU16(lua_State* L);

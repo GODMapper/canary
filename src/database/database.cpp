@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -12,6 +12,7 @@
 #include "config/configmanager.hpp"
 #include "database/database.hpp"
 #include "lib/di/container.hpp"
+#include "lib/metrics/metrics.hpp"
 
 Database::~Database() {
 	if (handle != nullptr) {
@@ -24,7 +25,7 @@ Database &Database::getInstance() {
 }
 
 bool Database::connect() {
-	return connect(&g_configManager().getString(MYSQL_HOST), &g_configManager().getString(MYSQL_USER), &g_configManager().getString(MYSQL_PASS), &g_configManager().getString(MYSQL_DB), g_configManager().getNumber(SQL_PORT), &g_configManager().getString(MYSQL_SOCK));
+	return connect(&g_configManager().getString(MYSQL_HOST, __FUNCTION__), &g_configManager().getString(MYSQL_USER, __FUNCTION__), &g_configManager().getString(MYSQL_PASS, __FUNCTION__), &g_configManager().getString(MYSQL_DB, __FUNCTION__), g_configManager().getNumber(SQL_PORT, __FUNCTION__), &g_configManager().getString(MYSQL_SOCK, __FUNCTION__));
 }
 
 bool Database::connect(const std::string* host, const std::string* user, const std::string* password, const std::string* database, uint32_t port, const std::string* sock) {
@@ -60,7 +61,10 @@ bool Database::beginTransaction() {
 	if (!executeQuery("BEGIN")) {
 		return false;
 	}
+	metrics::lock_latency measureLock("database");
 	databaseLock.lock();
+	measureLock.stop();
+
 	return true;
 }
 
@@ -95,6 +99,10 @@ bool Database::commit() {
 	return true;
 }
 
+bool Database::isRecoverableError(unsigned int error) const {
+	return error == CR_SERVER_LOST || error == CR_SERVER_GONE_ERROR || error == CR_CONN_HOST_ERROR || error == 1053 /*ER_SERVER_SHUTDOWN*/ || error == CR_CONNECTION_ERROR;
+}
+
 bool Database::retryQuery(const std::string_view &query, int retries) {
 	while (retries > 0 && mysql_query(handle, query.data()) != 0) {
 		g_logger().error("Query: {}", query.substr(0, 256));
@@ -119,11 +127,16 @@ bool Database::executeQuery(const std::string_view &query) {
 		return false;
 	}
 
+	g_logger().trace("Executing Query: {}", query);
+
+	metrics::lock_latency measureLock("database");
 	std::scoped_lock lock { databaseLock };
+	measureLock.stop();
 
+	metrics::query_latency measure(query.substr(0, 50));
 	bool success = retryQuery(query, 10);
-
 	mysql_free_result(mysql_store_result(handle));
+
 	return success;
 }
 
@@ -132,9 +145,13 @@ DBResult_ptr Database::storeQuery(const std::string_view &query) {
 		g_logger().error("Database not initialized!");
 		return nullptr;
 	}
+	g_logger().trace("Storing Query: {}", query);
 
+	metrics::lock_latency measureLock("database");
 	std::scoped_lock lock { databaseLock };
+	measureLock.stop();
 
+	metrics::query_latency measure(query.substr(0, 50));
 retry:
 	if (mysql_query(handle, query.data()) != 0) {
 		g_logger().error("Query: {}", query);
@@ -312,17 +329,46 @@ bool DBInsert::execute() {
 		return true;
 	}
 
-	std::ostringstream query;
-	query << this->query << " " << values;
+	std::string baseQuery = this->query;
+	std::string upsertQuery;
 
 	if (!upsertColumns.empty()) {
-		query << " ON DUPLICATE KEY UPDATE ";
+		std::ostringstream upsertStream;
+		upsertStream << " ON DUPLICATE KEY UPDATE ";
 		for (size_t i = 0; i < upsertColumns.size(); ++i) {
-			query << "`" << upsertColumns[i] << "` = VALUES(`" << upsertColumns[i] << "`)";
+			upsertStream << "`" << upsertColumns[i] << "` = VALUES(`" << upsertColumns[i] << "`)";
 			if (i < upsertColumns.size() - 1) {
-				query << ", ";
+				upsertStream << ", ";
 			}
 		}
+		upsertQuery = upsertStream.str();
 	}
-	return Database::getInstance().executeQuery(query.str());
+
+	std::string currentBatch = values;
+	while (!currentBatch.empty()) {
+		size_t cutPos = Database::MAX_QUERY_SIZE - baseQuery.size() - upsertQuery.size();
+		if (cutPos < currentBatch.size()) {
+			cutPos = currentBatch.rfind("),(", cutPos);
+			if (cutPos == std::string::npos) {
+				return false;
+			}
+			cutPos += 2;
+		} else {
+			cutPos = currentBatch.size();
+		}
+
+		std::string batchValues = currentBatch.substr(0, cutPos);
+		if (batchValues.back() == ',') {
+			batchValues.pop_back();
+		}
+		currentBatch = currentBatch.substr(cutPos);
+
+		std::ostringstream query;
+		query << baseQuery << " " << batchValues << upsertQuery;
+		if (!Database::getInstance().executeQuery(query.str())) {
+			return false;
+		}
+	}
+
+	return true;
 }

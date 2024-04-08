@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -60,7 +60,7 @@ public:
 
 	BaseImbuement* getBaseByID(uint16_t id);
 	CategoryImbuement* getCategoryByID(uint16_t id);
-	std::vector<Imbuement*> getImbuements(const Player* player, Item* item);
+	std::vector<Imbuement*> getImbuements(std::shared_ptr<Player> player, std::shared_ptr<Item> item);
 
 protected:
 	friend class Imbuement;

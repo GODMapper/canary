@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -22,26 +22,48 @@
 class ValueWrapper;
 
 using StringType = std::string;
+using BooleanType = bool;
 using IntType = int;
 using DoubleType = double;
 using ArrayType = std::vector<ValueWrapper>;
 using MapType = phmap::flat_hash_map<std::string, std::shared_ptr<ValueWrapper>>;
 
-using ValueVariant = std::variant<StringType, IntType, DoubleType, ArrayType, MapType>;
+using ValueVariant = std::variant<StringType, BooleanType, IntType, DoubleType, ArrayType, MapType>;
 
 class ValueWrapper {
 public:
 	explicit ValueWrapper(uint64_t timestamp = 0);
 	explicit(false) ValueWrapper(const ValueVariant &value, uint64_t timestamp = 0);
 	explicit(false) ValueWrapper(const std::string &value, uint64_t timestamp = 0);
+	explicit(false) ValueWrapper(bool value, uint64_t timestamp = 0);
 	explicit(false) ValueWrapper(int value, uint64_t timestamp = 0);
 	explicit(false) ValueWrapper(double value, uint64_t timestamp = 0);
 	explicit(false) ValueWrapper(const phmap::flat_hash_map<std::string, ValueWrapper> &value, uint64_t timestamp = 0);
 	explicit(false) ValueWrapper(const std::initializer_list<std::pair<const std::string, ValueWrapper>> &init_list, uint64_t timestamp = 0);
 
+	static ValueWrapper deleted() {
+		static ValueWrapper wrapper;
+		wrapper.setDeleted(true);
+		return wrapper;
+	}
+
 	template <typename T>
 	T get() const {
-		return std::get<T>(data_);
+		static_assert(std::is_same_v<T, StringType> || std::is_same_v<T, BooleanType> || std::is_same_v<T, IntType> || std::is_same_v<T, DoubleType> || std::is_same_v<T, ArrayType> || std::is_same_v<T, MapType>, "Invalid type T");
+
+		if (std::holds_alternative<T>(data_)) {
+			return std::get<T>(data_);
+		}
+		return T {};
+	}
+
+	double getNumber() const {
+		if (std::holds_alternative<IntType>(data_)) {
+			return static_cast<double>(std::get<IntType>(data_));
+		} else if (std::holds_alternative<DoubleType>(data_)) {
+			return std::get<DoubleType>(data_);
+		}
+		return 0.0;
 	}
 
 	const ValueVariant &getVariant() const {
@@ -65,10 +87,22 @@ public:
 		timestamp_ = timestamp;
 	}
 
+	void setDeleted(bool deleted) {
+		deleted_ = deleted;
+	}
+
+	bool isDeleted() const {
+		return deleted_;
+	}
+
 	bool operator==(const ValueWrapper &rhs) const;
 
 	explicit(false) operator std::string() const {
 		return get<StringType>();
+	}
+
+	explicit(false) operator bool() const {
+		return get<BooleanType>();
 	}
 
 	explicit(false) operator int() const {
@@ -90,6 +124,7 @@ public:
 private:
 	ValueVariant data_;
 	uint64_t timestamp_ = 0;
+	bool deleted_ = false;
 
 	template <typename Iter>
 	static MapType createMapFromRange(Iter begin, Iter end, uint64_t timestamp) {
@@ -115,6 +150,7 @@ private:
 
 template <typename T>
 T ValueWrapper::get(const std::string &key) const {
+	static_assert(std::is_same_v<T, StringType> || std::is_same_v<T, BooleanType> || std::is_same_v<T, IntType> || std::is_same_v<T, DoubleType> || std::is_same_v<T, ArrayType> || std::is_same_v<T, MapType>, "Invalid type T");
 	auto optValue = get(key);
 	if (optValue.has_value()) {
 		if (auto pval = std::get_if<T>(&optValue->data_)) {
@@ -126,6 +162,7 @@ T ValueWrapper::get(const std::string &key) const {
 
 template <typename T>
 T ValueWrapper::get(size_t index) const {
+	static_assert(std::is_same_v<T, StringType> || std::is_same_v<T, BooleanType> || std::is_same_v<T, IntType> || std::is_same_v<T, DoubleType> || std::is_same_v<T, ArrayType> || std::is_same_v<T, MapType>, "Invalid type T");
 	auto optValue = get(index);
 	if (optValue.has_value()) {
 		if (auto pval = std::get_if<T>(&optValue->data_)) {
@@ -158,7 +195,10 @@ inline bool operator==(const ValueVariant &lhs, const ValueVariant &rhs) {
 					return b.contains(key) && value.get() == b.at(key).get();
 				});
 			}
-			return a == b;
+			// Compares a and b if types A and B are the same, at compile-time
+			if constexpr (std::is_same_v<A, B>) {
+				return a == b;
+			}
 		},
 		lhs, rhs
 	);

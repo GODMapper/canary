@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -11,9 +11,9 @@
 
 #include "items/cylinder.hpp"
 
-VirtualCylinder* VirtualCylinder::virtualCylinder = new VirtualCylinder;
+std::shared_ptr<VirtualCylinder> VirtualCylinder::virtualCylinder = std::make_shared<VirtualCylinder>();
 
-int32_t Cylinder::getThingIndex(const Thing*) const {
+int32_t Cylinder::getThingIndex(std::shared_ptr<Thing>) const {
 	return -1;
 }
 
@@ -33,15 +33,15 @@ std::map<uint32_t, uint32_t> &Cylinder::getAllItemTypeCount(std::map<uint32_t, u
 	return countMap;
 }
 
-Thing* Cylinder::getThing(size_t) const {
+std::shared_ptr<Thing> Cylinder::getThing(size_t) const {
 	return nullptr;
 }
 
-void Cylinder::internalAddThing(Thing*) {
+void Cylinder::internalAddThing(std::shared_ptr<Thing>) {
 	//
 }
 
-void Cylinder::internalAddThing(uint32_t, Thing*) {
+void Cylinder::internalAddThing(uint32_t, std::shared_ptr<Thing>) {
 	//
 }
 

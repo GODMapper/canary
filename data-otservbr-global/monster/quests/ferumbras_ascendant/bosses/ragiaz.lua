@@ -2,7 +2,7 @@ local mType = Game.createMonsterType("Ragiaz")
 local monster = {}
 
 monster.description = "Ragiaz"
-monster.experience = 50000
+monster.experience = 250000
 monster.outfit = {
 	lookType = 862,
 	lookHead = 76,
@@ -13,10 +13,13 @@ monster.outfit = {
 	lookMount = 0,
 }
 
+monster.events = {
+	"AscendantBossesDeath",
+}
+
 monster.bosstiary = {
 	bossRaceId = 1180,
 	bossRace = RARITY_ARCHFOE,
-	storageCooldown = Storage.FerumbrasAscension.RagiazTimer,
 }
 
 monster.health = 280000

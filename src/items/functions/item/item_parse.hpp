@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -30,8 +30,8 @@ const phmap::flat_hash_map<std::string, ItemParseAttributes_t> ItemParseAttribut
 	{ "wrapcontainer", ITEM_PARSE_WRAPCONTAINER },
 	{ "wrapableto", ITEM_PARSE_WRAPABLETO },
 	{ "unwrapableto", ITEM_PARSE_WRAPABLETO },
-	{ "moveable", ITEM_PARSE_MOVEABLE },
-	{ "movable", ITEM_PARSE_MOVEABLE },
+	{ "movable", ITEM_PARSE_MOVABLE },
+	{ "movable", ITEM_PARSE_MOVABLE },
 	{ "blockprojectile", ITEM_PARSE_BLOCKPROJECTILE },
 	{ "allowpickupable", ITEM_PARSE_PICKUPABLE },
 	{ "pickupable", ITEM_PARSE_PICKUPABLE },
@@ -156,6 +156,8 @@ const phmap::flat_hash_map<std::string, ItemParseAttributes_t> ItemParseAttribut
 	{ "reflectdamage", ITEM_PARSE_REFLECTDAMAGE },
 	{ "reflectpercentall", ITEM_PARSE_REFLECTPERCENTALL },
 	{ "primarytype", ITEM_PARSE_PRIMARYTYPE },
+	{ "usedbyhouseguests", ITEM_PARSE_USEDBYGUESTS },
+	{ "script", ITEM_PARSE_SCRIPT },
 };
 
 const phmap::flat_hash_map<std::string, ItemTypes_t> ItemTypesMap = {
@@ -263,7 +265,7 @@ private:
 	static void parseRotateTo(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 	static void parseWrapContainer(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 	static void parseWrapableTo(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
-	static void parseMoveable(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+	static void parseMovable(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 	static void parseBlockProjectTile(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 	static void parsePickupable(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 	static void parseFloorChange(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
@@ -310,10 +312,13 @@ private:
 	static void parseReflectDamage(const std::string &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 	static void parseTransformOnUse(const std::string_view &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
 	static void parsePrimaryType(const std::string_view &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+	static void parseHouseRelated(const std::string_view &tmpStrValue, pugi::xml_attribute valueAttribute, ItemType &itemType);
+	static void parseUnscriptedItems(const std::string_view &tmpStrValue, pugi::xml_node attributeNode, pugi::xml_attribute valueAttribute, ItemType &itemType);
 
 private:
 	// Parent of the function: static void parseField
 	static std::tuple<ConditionId_t, ConditionType_t> parseFieldConditions(std::string lowerStringValue, pugi::xml_attribute valueAttribute);
 	static CombatType_t parseFieldCombatType(std::string string, pugi::xml_attribute valueAttribute);
-	static void parseFieldCombatDamage(ConditionDamage* conditionDamage, std::string stringValue, pugi::xml_node attributeNode);
+	static void parseFieldCombatDamage(std::shared_ptr<ConditionDamage> conditionDamage, std::string stringValue, pugi::xml_node attributeNode);
+	static void createAndRegisterScript(ItemType &itemType, pugi::xml_node attributeNode, MoveEvent_t eventType = MOVE_EVENT_NONE, WeaponType_t weaponType = WEAPON_NONE);
 };

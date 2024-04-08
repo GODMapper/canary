@@ -7,7 +7,7 @@ CREATE TABLE IF NOT EXISTS `server_config` (
     CONSTRAINT `server_config_pk` PRIMARY KEY (`config`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-INSERT INTO `server_config` (`config`, `value`) VALUES ('db_version', '38'), ('motd_hash', ''), ('motd_num', '0'), ('players_record', '0');
+INSERT INTO `server_config` (`config`, `value`) VALUES ('db_version', '44'), ('motd_hash', ''), ('motd_num', '0'), ('players_record', '0');
 
 -- Table structure `accounts`
 CREATE TABLE IF NOT EXISTS `accounts` (
@@ -129,8 +129,8 @@ CREATE TABLE IF NOT EXISTS `players` (
     `skill_manaleech_amount` bigint(20) UNSIGNED NOT NULL DEFAULT '0',
     `manashield` SMALLINT UNSIGNED NOT NULL DEFAULT '0',
     `max_manashield` SMALLINT UNSIGNED NOT NULL DEFAULT '0',
-    `xpboost_stamina` smallint(5) DEFAULT NULL,
-    `xpboost_value` tinyint(4) DEFAULT NULL,
+    `xpboost_stamina` smallint(5) UNSIGNED DEFAULT NULL,
+    `xpboost_value` tinyint(4) UNSIGNED DEFAULT NULL,
     `marriage_status` bigint(20) UNSIGNED NOT NULL DEFAULT '0',
     `marriage_spouse` int(11) NOT NULL DEFAULT '-1',
     `bonus_rerolls` bigint(21) NOT NULL DEFAULT '0',
@@ -312,9 +312,12 @@ CREATE TABLE IF NOT EXISTS `guild_wars` (
     `guild2` int(11) NOT NULL DEFAULT '0',
     `name1` varchar(255) NOT NULL,
     `name2` varchar(255) NOT NULL,
-    `status` tinyint(2) NOT NULL DEFAULT '0',
+    `status` tinyint(2) UNSIGNED NOT NULL DEFAULT '0',
     `started` bigint(15) NOT NULL DEFAULT '0',
     `ended` bigint(15) NOT NULL DEFAULT '0',
+    `frags_limit` smallint(4) UNSIGNED NOT NULL DEFAULT '0',
+    `payment` bigint(13) UNSIGNED NOT NULL DEFAULT '0',
+    `duration_days` tinyint(3) UNSIGNED NOT NULL DEFAULT '0',
     INDEX `guild1` (`guild1`),
     INDEX `guild2` (`guild2`),
     CONSTRAINT `guild_wars_pk` PRIMARY KEY (`id`)
@@ -331,7 +334,6 @@ CREATE TABLE IF NOT EXISTS `guildwar_kills` (
     `time` bigint(15) NOT NULL,
     INDEX `warid` (`warid`),
     CONSTRAINT `guildwar_kills_pk` PRIMARY KEY (`id`),
-    CONSTRAINT `guildwar_kills_unique` UNIQUE (`warid`),
     CONSTRAINT `guildwar_kills_warid_fk`
         FOREIGN KEY (`warid`) REFERENCES `guild_wars` (`id`)
         ON DELETE CASCADE
@@ -404,6 +406,7 @@ CREATE TABLE IF NOT EXISTS `guild_membership` (
 CREATE TABLE IF NOT EXISTS `houses` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
     `owner` int(11) NOT NULL,
+    `new_owner` int(11) NOT NULL DEFAULT '-1',
     `paid` int(10) UNSIGNED NOT NULL DEFAULT '0',
     `warnings` int(11) NOT NULL DEFAULT '0',
     `name` varchar(255) NOT NULL,
@@ -433,15 +436,18 @@ END
 DELIMITER ;
 
 -- Table structure `house_lists`
+
 CREATE TABLE IF NOT EXISTS `house_lists` (
-    `house_id` int(11) NOT NULL,
-    `listid` int(11) NOT NULL,
-    `list` text NOT NULL,
-    INDEX `house_id` (`house_id`),
-    CONSTRAINT `houses_list_house_fk`
-        FOREIGN KEY (`house_id`) REFERENCES `houses` (`id`)
-        ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+  `house_id` int NOT NULL,
+  `listid` int NOT NULL,
+  `version` bigint NOT NULL DEFAULT '0',
+  `list` text NOT NULL,
+  PRIMARY KEY (`house_id`, `listid`),
+  KEY `house_id_index` (`house_id`),
+  KEY `version` (`version`),
+  CONSTRAINT `houses_list_house_fk` FOREIGN KEY (`house_id`) REFERENCES `houses` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+
 
 -- Table structure `ip_bans`
 CREATE TABLE IF NOT EXISTS `ip_bans` (
@@ -635,12 +641,6 @@ CREATE TABLE IF NOT EXISTS `player_kills` (
     `time` bigint(20) UNSIGNED NOT NULL DEFAULT '0',
     `target` int(11) NOT NULL,
     `unavenged` tinyint(1) NOT NULL DEFAULT '0'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
--- Table structure `player_misc`
-CREATE TABLE IF NOT EXISTS `player_misc` (
-    `player_id` int(11) NOT NULL,
-    `info` blob NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- Table structure `player_namelocks`

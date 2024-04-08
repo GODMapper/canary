@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -9,7 +9,6 @@
 
 #include "pch.hpp"
 
-#include "items/item.hpp"
 #include "items/weapons/weapons.hpp"
 #include "creatures/players/imbuements/imbuements.hpp"
 #include "lua/functions/items/imbuement_functions.hpp"
@@ -58,7 +57,7 @@ int ImbuementFunctions::luaImbuementGetItems(lua_State* L) {
 		return 1;
 	}
 
-	const auto &items = imbuement->getItems();
+	const auto items = imbuement->getItems();
 
 	lua_createtable(L, items.size(), 0);
 	for (const auto &itm : items) {

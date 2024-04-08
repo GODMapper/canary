@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -25,7 +25,7 @@ bool TalkActions::registerLuaEvent(const TalkAction_ptr &talkAction) {
 	return inserted;
 }
 
-bool TalkActions::checkWord(Player* player, SpeakClasses type, const std::string &words, const std::string_view &word, const TalkAction_ptr &talkActionPtr) const {
+bool TalkActions::checkWord(std::shared_ptr<Player> player, SpeakClasses type, const std::string &words, const std::string_view &word, const TalkAction_ptr &talkActionPtr) const {
 	auto spacePos = std::ranges::find_if(words.begin(), words.end(), ::isspace);
 	std::string firstWord = words.substr(0, spacePos - words.begin());
 
@@ -61,7 +61,7 @@ bool TalkActions::checkWord(Player* player, SpeakClasses type, const std::string
 	return talkActionPtr->executeSay(player, words, param, type);
 }
 
-TalkActionResult_t TalkActions::checkPlayerCanSayTalkAction(Player* player, SpeakClasses type, const std::string &words) const {
+TalkActionResult_t TalkActions::checkPlayerCanSayTalkAction(std::shared_ptr<Player> player, SpeakClasses type, const std::string &words) const {
 	for (const auto &[talkactionWords, talkActionPtr] : talkActions) {
 		if (talkactionWords.find(',') != std::string::npos) {
 			auto wordsList = split(talkactionWords);
@@ -79,7 +79,7 @@ TalkActionResult_t TalkActions::checkPlayerCanSayTalkAction(Player* player, Spea
 	return TALKACTION_CONTINUE;
 }
 
-bool TalkAction::executeSay(Player* player, const std::string &words, const std::string &param, SpeakClasses type) const {
+bool TalkAction::executeSay(std::shared_ptr<Player> player, const std::string &words, const std::string &param, SpeakClasses type) const {
 	// onSay(player, words, param, type)
 	if (!getScriptInterface()->reserveScriptEnv()) {
 		g_logger().error("[TalkAction::executeSay - Player {} words {}] "
@@ -103,4 +103,12 @@ bool TalkAction::executeSay(Player* player, const std::string &words, const std:
 	lua_pushnumber(L, type);
 
 	return getScriptInterface()->callFunction(4);
+}
+
+void TalkAction::setGroupType(uint8_t newGroupType) {
+	m_groupType = newGroupType;
+}
+
+const uint8_t &TalkAction::getGroupType() const {
+	return m_groupType;
 }

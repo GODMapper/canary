@@ -302,7 +302,7 @@ npcConfig.shop = {
 	{ itemName = "hazardous heart", clientId = 34140, sell = 5000 },
 	{ itemName = "hazardous robe", clientId = 34147, sell = 3000 },
 	{ itemName = "head", clientId = 33937, sell = 3500 },
-	{ itemName = "headpecker beak", clientId = 39387, sell = 2800 },
+	{ itemName = "headpecker beak", clientId = 39387, sell = 2998 },
 	{ itemName = "headpecker feather", clientId = 39388, sell = 1300 },
 	{ itemName = "heaven blossom", clientId = 3657, sell = 50 },
 	{ itemName = "hellhound slobber", clientId = 9637, sell = 500 },
@@ -377,7 +377,7 @@ npcConfig.shop = {
 	{ itemName = "mantassin tail", clientId = 11489, sell = 280 },
 	{ itemName = "manticore ear", clientId = 31440, sell = 310 },
 	{ itemName = "manticore tail", clientId = 31439, sell = 220 },
-	{ itemName = "mantosaurus jaw", clientId = 39386, sell = 2800 },
+	{ itemName = "mantosaurus jaw", clientId = 39386, sell = 2998 },
 	{ itemName = "marsh stalker beak", clientId = 17461, sell = 65 },
 	{ itemName = "marsh stalker feather", clientId = 17462, sell = 50 },
 	{ itemName = "maxxenius head", clientId = 29942, sell = 500000 },
@@ -653,7 +653,7 @@ npcType.onBuyItem = function(npc, player, itemId, subType, amount, ignore, inBac
 end
 -- On sell npc shop message
 npcType.onSellItem = function(npc, player, itemId, subtype, amount, ignore, name, totalCost)
-	player:sendTextMessage(MESSAGE_INFO_DESCR, string.format("Sold %ix %s for %i gold.", amount, name, totalCost))
+	player:sendTextMessage(MESSAGE_TRADE, string.format("Sold %ix %s for %i gold.", amount, name, totalCost))
 end
 -- On check npc shop message (look item)
 npcType.onCheckItem = function(npc, player, clientId, subType) end
@@ -672,12 +672,21 @@ local function creatureSayCallback(npc, creature, type, message)
 		return npcHandler:say("Tje hari ku ne finjala. {Ariki}?", npc, creature)
 	elseif MsgContains(message, "passage") then
 		return npcHandler:say("Soso yana. <shakes his head>", npc, creature)
+	elseif MsgContains(message, "ariki") then
+		npc:openShopWindow(creature)
+		creature:addAchievement("Si, Ariki!")
 	end
+	return true
+end
+
+local function onTradeRequest(npc, creature, message)
+	creature:addAchievement("Si, Ariki!")
 	return true
 end
 
 npcHandler:setMessage(MESSAGE_FAREWELL, "Si, jema ze harun. <waves>")
 npcHandler:setCallback(CALLBACK_MESSAGE_DEFAULT, creatureSayCallback)
+npcHandler:setCallback(CALLBACK_ON_TRADE_REQUEST, onTradeRequest)
 npcHandler:addModule(FocusModule:new(), npcConfig.name, true, true, true)
 
 npcType:register(npcConfig)

@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -14,7 +14,7 @@
 class PartyFunctions final : LuaScriptInterface {
 public:
 	static void init(lua_State* L) {
-		registerClass(L, "Party", "", PartyFunctions::luaPartyCreate);
+		registerSharedClass(L, "Party", "", PartyFunctions::luaPartyCreate);
 		registerMetaMethod(L, "Party", "__eq", PartyFunctions::luaUserdataCompare);
 		registerMethod(L, "Party", "disband", PartyFunctions::luaPartyDisband);
 		registerMethod(L, "Party", "getLeader", PartyFunctions::luaPartyGetLeader);

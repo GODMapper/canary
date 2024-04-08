@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -15,7 +15,7 @@
 
 int TownFunctions::luaTownCreate(lua_State* L) {
 	// Town(id or name)
-	Town* town;
+	std::shared_ptr<Town> town;
 	if (isNumber(L, 2)) {
 		town = g_game().map.towns.getTown(getNumber<uint32_t>(L, 2));
 	} else if (isString(L, 2)) {
@@ -35,8 +35,7 @@ int TownFunctions::luaTownCreate(lua_State* L) {
 
 int TownFunctions::luaTownGetId(lua_State* L) {
 	// town:getId()
-	Town* town = getUserdata<Town>(L, 1);
-	if (town) {
+	if (const auto &town = getUserdataShared<Town>(L, 1)) {
 		lua_pushnumber(L, town->getID());
 	} else {
 		lua_pushnil(L);
@@ -46,8 +45,7 @@ int TownFunctions::luaTownGetId(lua_State* L) {
 
 int TownFunctions::luaTownGetName(lua_State* L) {
 	// town:getName()
-	Town* town = getUserdata<Town>(L, 1);
-	if (town) {
+	if (const auto &town = getUserdataShared<Town>(L, 1)) {
 		pushString(L, town->getName());
 	} else {
 		lua_pushnil(L);
@@ -57,8 +55,7 @@ int TownFunctions::luaTownGetName(lua_State* L) {
 
 int TownFunctions::luaTownGetTemplePosition(lua_State* L) {
 	// town:getTemplePosition()
-	Town* town = getUserdata<Town>(L, 1);
-	if (town) {
+	if (const auto &town = getUserdataShared<Town>(L, 1)) {
 		pushPosition(L, town->getTemplePosition());
 	} else {
 		lua_pushnil(L);

@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -15,10 +15,11 @@ class ContainerFunctions final : LuaScriptInterface {
 public:
 private:
 	static void init(lua_State* L) {
-		registerClass(L, "Container", "Item", ContainerFunctions::luaContainerCreate);
+		registerSharedClass(L, "Container", "Item", ContainerFunctions::luaContainerCreate);
 		registerMetaMethod(L, "Container", "__eq", ContainerFunctions::luaUserdataCompare);
 
 		registerMethod(L, "Container", "getSize", ContainerFunctions::luaContainerGetSize);
+		registerMethod(L, "Container", "getMaxCapacity", ContainerFunctions::luaContainerGetMaxCapacity);
 		registerMethod(L, "Container", "getCapacity", ContainerFunctions::luaContainerGetCapacity);
 		registerMethod(L, "Container", "getEmptySlots", ContainerFunctions::luaContainerGetEmptySlots);
 		registerMethod(L, "Container", "getContentDescription", ContainerFunctions::luaContainerGetContentDescription);
@@ -37,6 +38,7 @@ private:
 	static int luaContainerCreate(lua_State* L);
 
 	static int luaContainerGetSize(lua_State* L);
+	static int luaContainerGetMaxCapacity(lua_State* L);
 	static int luaContainerGetCapacity(lua_State* L);
 	static int luaContainerGetEmptySlots(lua_State* L);
 

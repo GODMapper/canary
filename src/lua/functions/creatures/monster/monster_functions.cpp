@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -14,10 +14,12 @@
 #include "creatures/monsters/monster.hpp"
 #include "creatures/monsters/monsters.hpp"
 #include "lua/functions/creatures/monster/monster_functions.hpp"
+#include "map/spectators.hpp"
+#include "game/scheduling/events_scheduler.hpp"
 
 int MonsterFunctions::luaMonsterCreate(lua_State* L) {
 	// Monster(id or userdata)
-	Monster* monster;
+	std::shared_ptr<Monster> monster;
 	if (isNumber(L, 2)) {
 		monster = g_game().getMonsterByID(getNumber<uint32_t>(L, 2));
 	} else if (isUserdata(L, 2)) {
@@ -25,7 +27,7 @@ int MonsterFunctions::luaMonsterCreate(lua_State* L) {
 			lua_pushnil(L);
 			return 1;
 		}
-		monster = getUserdata<Monster>(L, 2);
+		monster = getUserdataShared<Monster>(L, 2);
 	} else {
 		monster = nullptr;
 	}
@@ -41,13 +43,13 @@ int MonsterFunctions::luaMonsterCreate(lua_State* L) {
 
 int MonsterFunctions::luaMonsterIsMonster(lua_State* L) {
 	// monster:isMonster()
-	pushBoolean(L, getUserdata<const Monster>(L, 1) != nullptr);
+	pushBoolean(L, getUserdataShared<Monster>(L, 1) != nullptr);
 	return 1;
 }
 
 int MonsterFunctions::luaMonsterGetType(lua_State* L) {
 	// monster:getType()
-	const Monster* monster = getUserdata<const Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
 		pushUserdata<MonsterType>(L, monster->mType);
 		setMetatable(L, -1, "MonsterType");
@@ -59,7 +61,7 @@ int MonsterFunctions::luaMonsterGetType(lua_State* L) {
 
 int MonsterFunctions::luaMonsterSetType(lua_State* L) {
 	// monster:setType(name or raceid)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
 		std::shared_ptr<MonsterType> mType = nullptr;
 		if (isNumber(L, 2)) {
@@ -92,12 +94,8 @@ int MonsterFunctions::luaMonsterSetType(lua_State* L) {
 			}
 		}
 		// Reload creature on spectators
-		SpectatorHashSet spectators;
-		g_game().map.getSpectators(spectators, monster->getPosition(), true);
-		for (Creature* spectator : spectators) {
-			if (Player* tmpPlayer = spectator->getPlayer()) {
-				tmpPlayer->sendCreatureReload(monster);
-			}
+		for (const auto &spectator : Spectators().find<Player>(monster->getPosition(), true)) {
+			spectator->getPlayer()->sendCreatureReload(monster);
 		}
 		pushBoolean(L, true);
 	} else {
@@ -108,7 +106,7 @@ int MonsterFunctions::luaMonsterSetType(lua_State* L) {
 
 int MonsterFunctions::luaMonsterGetSpawnPosition(lua_State* L) {
 	// monster:getSpawnPosition()
-	const Monster* monster = getUserdata<const Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
 		pushPosition(L, monster->getMasterPos());
 	} else {
@@ -119,7 +117,7 @@ int MonsterFunctions::luaMonsterGetSpawnPosition(lua_State* L) {
 
 int MonsterFunctions::luaMonsterIsInSpawnRange(lua_State* L) {
 	// monster:isInSpawnRange([position])
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
 		pushBoolean(L, monster->isInSpawnRange(lua_gettop(L) >= 2 ? getPosition(L, 2) : monster->getPosition()));
 	} else {
@@ -130,7 +128,7 @@ int MonsterFunctions::luaMonsterIsInSpawnRange(lua_State* L) {
 
 int MonsterFunctions::luaMonsterIsIdle(lua_State* L) {
 	// monster:isIdle()
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
 		pushBoolean(L, monster->getIdleStatus());
 	} else {
@@ -141,7 +139,7 @@ int MonsterFunctions::luaMonsterIsIdle(lua_State* L) {
 
 int MonsterFunctions::luaMonsterSetIdle(lua_State* L) {
 	// monster:setIdle(idle)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		lua_pushnil(L);
 		return 1;
@@ -154,9 +152,9 @@ int MonsterFunctions::luaMonsterSetIdle(lua_State* L) {
 
 int MonsterFunctions::luaMonsterIsTarget(lua_State* L) {
 	// monster:isTarget(creature)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
-		const Creature* creature = getCreature(L, 2);
+		std::shared_ptr<Creature> creature = getCreature(L, 2);
 		pushBoolean(L, monster->isTarget(creature));
 	} else {
 		lua_pushnil(L);
@@ -166,9 +164,9 @@ int MonsterFunctions::luaMonsterIsTarget(lua_State* L) {
 
 int MonsterFunctions::luaMonsterIsOpponent(lua_State* L) {
 	// monster:isOpponent(creature)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
-		const Creature* creature = getCreature(L, 2);
+		std::shared_ptr<Creature> creature = getCreature(L, 2);
 		pushBoolean(L, monster->isOpponent(creature));
 	} else {
 		lua_pushnil(L);
@@ -178,9 +176,9 @@ int MonsterFunctions::luaMonsterIsOpponent(lua_State* L) {
 
 int MonsterFunctions::luaMonsterIsFriend(lua_State* L) {
 	// monster:isFriend(creature)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
-		const Creature* creature = getCreature(L, 2);
+		std::shared_ptr<Creature> creature = getCreature(L, 2);
 		pushBoolean(L, monster->isFriend(creature));
 	} else {
 		lua_pushnil(L);
@@ -190,9 +188,9 @@ int MonsterFunctions::luaMonsterIsFriend(lua_State* L) {
 
 int MonsterFunctions::luaMonsterAddFriend(lua_State* L) {
 	// monster:addFriend(creature)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
-		Creature* creature = getCreature(L, 2);
+		std::shared_ptr<Creature> creature = getCreature(L, 2);
 		monster->addFriend(creature);
 		pushBoolean(L, true);
 	} else {
@@ -203,9 +201,9 @@ int MonsterFunctions::luaMonsterAddFriend(lua_State* L) {
 
 int MonsterFunctions::luaMonsterRemoveFriend(lua_State* L) {
 	// monster:removeFriend(creature)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
-		Creature* creature = getCreature(L, 2);
+		std::shared_ptr<Creature> creature = getCreature(L, 2);
 		monster->removeFriend(creature);
 		pushBoolean(L, true);
 	} else {
@@ -216,7 +214,7 @@ int MonsterFunctions::luaMonsterRemoveFriend(lua_State* L) {
 
 int MonsterFunctions::luaMonsterGetFriendList(lua_State* L) {
 	// monster:getFriendList()
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		lua_pushnil(L);
 		return 1;
@@ -226,7 +224,7 @@ int MonsterFunctions::luaMonsterGetFriendList(lua_State* L) {
 	lua_createtable(L, friendList.size(), 0);
 
 	int index = 0;
-	for (Creature* creature : friendList) {
+	for (const auto &creature : friendList) {
 		pushUserdata<Creature>(L, creature);
 		setCreatureMetatable(L, -1, creature);
 		lua_rawseti(L, -2, ++index);
@@ -236,7 +234,7 @@ int MonsterFunctions::luaMonsterGetFriendList(lua_State* L) {
 
 int MonsterFunctions::luaMonsterGetFriendCount(lua_State* L) {
 	// monster:getFriendCount()
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
 		lua_pushnumber(L, monster->getFriendList().size());
 	} else {
@@ -247,13 +245,13 @@ int MonsterFunctions::luaMonsterGetFriendCount(lua_State* L) {
 
 int MonsterFunctions::luaMonsterAddTarget(lua_State* L) {
 	// monster:addTarget(creature[, pushFront = false])
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		lua_pushnil(L);
 		return 1;
 	}
 
-	Creature* creature = getCreature(L, 2);
+	std::shared_ptr<Creature> creature = getCreature(L, 2);
 	bool pushFront = getBoolean(L, 3, false);
 	monster->addTarget(creature, pushFront);
 	pushBoolean(L, true);
@@ -262,7 +260,7 @@ int MonsterFunctions::luaMonsterAddTarget(lua_State* L) {
 
 int MonsterFunctions::luaMonsterRemoveTarget(lua_State* L) {
 	// monster:removeTarget(creature)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		lua_pushnil(L);
 		return 1;
@@ -275,17 +273,17 @@ int MonsterFunctions::luaMonsterRemoveTarget(lua_State* L) {
 
 int MonsterFunctions::luaMonsterGetTargetList(lua_State* L) {
 	// monster:getTargetList()
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		lua_pushnil(L);
 		return 1;
 	}
 
-	const auto &targetList = monster->getTargetList();
+	const auto targetList = monster->getTargetList();
 	lua_createtable(L, targetList.size(), 0);
 
 	int index = 0;
-	for (Creature* creature : targetList) {
+	for (std::shared_ptr<Creature> creature : targetList) {
 		pushUserdata<Creature>(L, creature);
 		setCreatureMetatable(L, -1, creature);
 		lua_rawseti(L, -2, ++index);
@@ -295,7 +293,7 @@ int MonsterFunctions::luaMonsterGetTargetList(lua_State* L) {
 
 int MonsterFunctions::luaMonsterGetTargetCount(lua_State* L) {
 	// monster:getTargetCount()
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
 		lua_pushnumber(L, monster->getTargetList().size());
 	} else {
@@ -306,7 +304,7 @@ int MonsterFunctions::luaMonsterGetTargetCount(lua_State* L) {
 
 int MonsterFunctions::luaMonsterChangeTargetDistance(lua_State* L) {
 	// monster:changeTargetDistance(distance[, duration = 12000])
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
 		int32_t distance = getNumber<int32_t>(L, 2, 1);
 		uint32_t duration = getNumber<uint32_t>(L, 3, 12000);
@@ -319,7 +317,7 @@ int MonsterFunctions::luaMonsterChangeTargetDistance(lua_State* L) {
 
 int MonsterFunctions::luaMonsterIsChallenged(lua_State* L) {
 	// monster:isChallenged()
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
 		pushBoolean(L, monster->isChallenged());
 	} else {
@@ -330,9 +328,9 @@ int MonsterFunctions::luaMonsterIsChallenged(lua_State* L) {
 
 int MonsterFunctions::luaMonsterSelectTarget(lua_State* L) {
 	// monster:selectTarget(creature)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
-		Creature* creature = getCreature(L, 2);
+		std::shared_ptr<Creature> creature = getCreature(L, 2);
 		pushBoolean(L, monster->selectTarget(creature));
 	} else {
 		lua_pushnil(L);
@@ -342,7 +340,7 @@ int MonsterFunctions::luaMonsterSelectTarget(lua_State* L) {
 
 int MonsterFunctions::luaMonsterSearchTarget(lua_State* L) {
 	// monster:searchTarget([searchType = TARGETSEARCH_DEFAULT])
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (monster) {
 		TargetSearchType_t searchType = getNumber<TargetSearchType_t>(L, 2, TARGETSEARCH_DEFAULT);
 		pushBoolean(L, monster->searchTarget(searchType));
@@ -353,19 +351,22 @@ int MonsterFunctions::luaMonsterSearchTarget(lua_State* L) {
 }
 
 int MonsterFunctions::luaMonsterSetSpawnPosition(lua_State* L) {
-	// monster:setSpawnPosition()
-	Monster* monster = getUserdata<Monster>(L, 1);
+	// monster:setSpawnPosition(interval)
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		lua_pushnil(L);
 		return 1;
 	}
+
+	uint32_t eventschedule = g_eventsScheduler().getSpawnMonsterSchedule();
 
 	const Position &pos = monster->getPosition();
 	monster->setMasterPos(pos);
 
 	g_game().map.spawnsMonster.getspawnMonsterList().emplace_front(pos, 5);
 	SpawnMonster &spawnMonster = g_game().map.spawnsMonster.getspawnMonsterList().front();
-	spawnMonster.addMonster(monster->mType->name, pos, DIRECTION_NORTH, 60000);
+	uint32_t interval = getNumber<uint32_t>(L, 2, 90) * 1000 * 100 / std::max((uint32_t)1, (g_configManager().getNumber(RATE_SPAWN, __FUNCTION__) * eventschedule));
+	spawnMonster.addMonster(monster->mType->typeName, pos, DIRECTION_NORTH, static_cast<uint32_t>(interval));
 	spawnMonster.startSpawnMonsterCheck();
 
 	pushBoolean(L, true);
@@ -374,7 +375,7 @@ int MonsterFunctions::luaMonsterSetSpawnPosition(lua_State* L) {
 
 int MonsterFunctions::luaMonsterGetRespawnType(lua_State* L) {
 	// monster:getRespawnType()
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 
 	if (!monster) {
 		lua_pushnil(L);
@@ -390,7 +391,7 @@ int MonsterFunctions::luaMonsterGetRespawnType(lua_State* L) {
 
 int MonsterFunctions::luaMonsterGetTimeToChangeFiendish(lua_State* L) {
 	// monster:getTimeToChangeFiendish()
-	const Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_NOT_FOUND));
 		pushBoolean(L, false);
@@ -404,7 +405,7 @@ int MonsterFunctions::luaMonsterGetTimeToChangeFiendish(lua_State* L) {
 int MonsterFunctions::luaMonsterSetTimeToChangeFiendish(lua_State* L) {
 	// monster:setTimeToChangeFiendish(endTime)
 	time_t endTime = getNumber<uint32_t>(L, 2, 1);
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_NOT_FOUND));
 		pushBoolean(L, false);
@@ -417,7 +418,7 @@ int MonsterFunctions::luaMonsterSetTimeToChangeFiendish(lua_State* L) {
 
 int MonsterFunctions::luaMonsterGetMonsterForgeClassification(lua_State* L) {
 	// monster:getMonsterForgeClassification()
-	const Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_NOT_FOUND));
 		pushBoolean(L, false);
@@ -432,7 +433,7 @@ int MonsterFunctions::luaMonsterGetMonsterForgeClassification(lua_State* L) {
 int MonsterFunctions::luaMonsterSetMonsterForgeClassification(lua_State* L) {
 	// monster:setMonsterForgeClassification(classication)
 	ForgeClassifications_t classification = getNumber<ForgeClassifications_t>(L, 2);
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_NOT_FOUND));
 		pushBoolean(L, false);
@@ -445,7 +446,7 @@ int MonsterFunctions::luaMonsterSetMonsterForgeClassification(lua_State* L) {
 
 int MonsterFunctions::luaMonsterGetForgeStack(lua_State* L) {
 	// monster:getForgeStack()
-	const Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_NOT_FOUND));
 		pushBoolean(L, false);
@@ -459,7 +460,7 @@ int MonsterFunctions::luaMonsterGetForgeStack(lua_State* L) {
 int MonsterFunctions::luaMonsterSetForgeStack(lua_State* L) {
 	// monster:setForgeStack(stack)
 	uint16_t stack = getNumber<uint16_t>(L, 2, 0);
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_NOT_FOUND));
 		pushBoolean(L, false);
@@ -478,7 +479,7 @@ int MonsterFunctions::luaMonsterSetForgeStack(lua_State* L) {
 
 int MonsterFunctions::luaMonsterConfigureForgeSystem(lua_State* L) {
 	// monster:configureForgeSystem()
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_NOT_FOUND));
 		pushBoolean(L, false);
@@ -491,7 +492,7 @@ int MonsterFunctions::luaMonsterConfigureForgeSystem(lua_State* L) {
 
 int MonsterFunctions::luaMonsterClearFiendishStatus(lua_State* L) {
 	// monster:clearFiendishStatus()
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_NOT_FOUND));
 		pushBoolean(L, false);
@@ -504,7 +505,7 @@ int MonsterFunctions::luaMonsterClearFiendishStatus(lua_State* L) {
 
 int MonsterFunctions::luaMonsterIsForgeable(lua_State* L) {
 	// monster:isForgeable()
-	const Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_NOT_FOUND));
 		pushBoolean(L, false);
@@ -517,7 +518,7 @@ int MonsterFunctions::luaMonsterIsForgeable(lua_State* L) {
 
 int MonsterFunctions::luaMonsterGetName(lua_State* L) {
 	// monster:getName()
-	const auto monster = getUserdata<const Monster>(L, 1);
+	const auto monster = getUserdataShared<Monster>(L, 1);
 	if (!monster) {
 		reportErrorFunc(getErrorDesc(LUA_ERROR_MONSTER_NOT_FOUND));
 		pushBoolean(L, false);
@@ -530,7 +531,7 @@ int MonsterFunctions::luaMonsterGetName(lua_State* L) {
 
 int MonsterFunctions::luaMonsterHazard(lua_State* L) {
 	// get: monster:hazard() ; set: monster:hazard(hazard)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	bool hazard = getBoolean(L, 2, false);
 	if (monster) {
 		if (lua_gettop(L) == 1) {
@@ -547,7 +548,7 @@ int MonsterFunctions::luaMonsterHazard(lua_State* L) {
 
 int MonsterFunctions::luaMonsterHazardCrit(lua_State* L) {
 	// get: monster:hazardCrit() ; set: monster:hazardCrit(hazardCrit)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	bool hazardCrit = getBoolean(L, 2, false);
 	if (monster) {
 		if (lua_gettop(L) == 1) {
@@ -564,7 +565,7 @@ int MonsterFunctions::luaMonsterHazardCrit(lua_State* L) {
 
 int MonsterFunctions::luaMonsterHazardDodge(lua_State* L) {
 	// get: monster:hazardDodge() ; set: monster:hazardDodge(hazardDodge)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	bool hazardDodge = getBoolean(L, 2, false);
 	if (monster) {
 		if (lua_gettop(L) == 1) {
@@ -581,14 +582,31 @@ int MonsterFunctions::luaMonsterHazardDodge(lua_State* L) {
 
 int MonsterFunctions::luaMonsterHazardDamageBoost(lua_State* L) {
 	// get: monster:hazardDamageBoost() ; set: monster:hazardDamageBoost(hazardDamageBoost)
-	Monster* monster = getUserdata<Monster>(L, 1);
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
 	bool hazardDamageBoost = getBoolean(L, 2, false);
 	if (monster) {
 		if (lua_gettop(L) == 1) {
 			pushBoolean(L, monster->getHazardSystemDamageBoost());
 		} else {
 			monster->setHazardSystemDamageBoost(hazardDamageBoost);
-			pushBoolean(L, monster->getHazardSystemCrit());
+			pushBoolean(L, monster->getHazardSystemDamageBoost());
+		}
+	} else {
+		lua_pushnil(L);
+	}
+	return 1;
+}
+
+int MonsterFunctions::luaMonsterHazardDefenseBoost(lua_State* L) {
+	// get: monster:hazardDefenseBoost() ; set: monster:hazardDefenseBoost(hazardDefenseBoost)
+	std::shared_ptr<Monster> monster = getUserdataShared<Monster>(L, 1);
+	bool hazardDefenseBoost = getBoolean(L, 2, false);
+	if (monster) {
+		if (lua_gettop(L) == 1) {
+			pushBoolean(L, monster->getHazardSystemDefenseBoost());
+		} else {
+			monster->setHazardSystemDefenseBoost(hazardDefenseBoost);
+			pushBoolean(L, monster->getHazardSystemDefenseBoost());
 		}
 	} else {
 		lua_pushnil(L);

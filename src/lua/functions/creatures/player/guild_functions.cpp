@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -54,11 +54,11 @@ int GuildFunctions::luaGuildGetMembersOnline(lua_State* L) {
 		return 1;
 	}
 
-	const auto &members = guild->getMembersOnline();
+	const auto members = guild->getMembersOnline();
 	lua_createtable(L, members.size(), 0);
 
 	int index = 0;
-	for (Player* player : members) {
+	for (std::shared_ptr<Player> player : members) {
 		pushUserdata<Player>(L, player);
 		setMetatable(L, -1, "Player");
 		lua_rawseti(L, -2, ++index);

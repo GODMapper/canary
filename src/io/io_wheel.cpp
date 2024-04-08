@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -16,6 +16,10 @@
 #include "creatures/combat/spells.hpp"
 
 #include "utils/tools.hpp"
+
+#define MITIGATION_INCREASE 0.03
+#define MANA_LEECH_INCREASE 0.25
+#define HEALTH_LEECH_INCREASE 0.75
 
 /**
  * @brief This namespace groups together variables, functions, and class definitions within a specific scope.
@@ -49,7 +53,7 @@ namespace InternalPlayerWheel {
 	void registerWheelSpellTable(const T &spellData, const std::string &name, WheelSpellGrade_t gradeType) {
 		if (name == "Any_Focus_Mage_Spell") {
 			for (const std::string &focusSpellName : m_focusSpells) {
-				g_logger().debug("[{}] registered any spell: {}", __FUNCTION__, focusSpellName);
+				g_logger().trace("[{}] registered any spell: {}", __FUNCTION__, focusSpellName);
 				registerWheelSpellTable(spellData, focusSpellName, gradeType);
 			}
 			return;
@@ -57,9 +61,9 @@ namespace InternalPlayerWheel {
 
 		auto spell = g_spells().getInstantSpellByName(name);
 		if (spell) {
-			g_logger().debug("[{}] registering instant spell with name {}", __FUNCTION__, spell->getName());
+			g_logger().trace("[{}] registering instant spell with name {}", __FUNCTION__, spell->getName());
 			// Increase data
-			const auto &increaseData = spellData.increase;
+			const auto increaseData = spellData.increase;
 			if (increaseData.damage > 0) {
 				spell->setWheelOfDestinyBoost(WheelSpellBoost_t::DAMAGE, gradeType, increaseData.damage);
 			}
@@ -74,7 +78,7 @@ namespace InternalPlayerWheel {
 			}
 
 			// Decrease data
-			const auto &decreaseData = spellData.decrease;
+			const auto decreaseData = spellData.decrease;
 			if (decreaseData.cooldown > 0) {
 				spell->setWheelOfDestinyBoost(WheelSpellBoost_t::COOLDOWN, gradeType, decreaseData.cooldown * 1000);
 			}
@@ -85,7 +89,7 @@ namespace InternalPlayerWheel {
 				spell->setWheelOfDestinyBoost(WheelSpellBoost_t::SECONDARY_GROUP_COOLDOWN, gradeType, decreaseData.secondaryGroupCooldown * 1000);
 			}
 			// Leech data
-			const auto &leechData = spellData.leech;
+			const auto leechData = spellData.leech;
 			if (leechData.mana > 0) {
 				spell->setWheelOfDestinyBoost(WheelSpellBoost_t::MANA_LEECH, gradeType, leechData.mana * 100);
 			}
@@ -124,7 +128,7 @@ bool IOWheel::initializeGlobalData(bool reload /* = false*/) {
 	// Register spells for druid
 	for (const auto &data : getWheelBonusData().spells.druid) {
 		for (size_t i = 1; i < 3; ++i) {
-			const auto &grade = data.grade[i];
+			const auto grade = data.grade[i];
 			InternalPlayerWheel::registerWheelSpellTable(grade, data.name, static_cast<WheelSpellGrade_t>(i));
 		}
 	}
@@ -170,7 +174,7 @@ const std::vector<std::string> &IOWheel::getFocusSpells() const {
 	return InternalPlayerWheel::m_focusSpells;
 }
 
-using VocationBonusFunction = std::function<void(Player &, uint16_t, uint8_t, PlayerWheelMethodsBonusData &)>;
+using VocationBonusFunction = std::function<void(const std::shared_ptr<Player> &, uint16_t, uint8_t, PlayerWheelMethodsBonusData &)>;
 using VocationBonusMap = std::map<WheelSlots_t, VocationBonusFunction>;
 const VocationBonusMap &IOWheel::getWheelMapFunctions() const {
 	return m_vocationBonusMap;
@@ -306,8 +310,8 @@ void IOWheel::initializeSorcererSpells() {
 	m_wheelBonusData.spells.sorcerer[4].grade[2].decrease.secondaryGroupCooldown = 4;
 }
 
-bool IOWheel::isMaxPointAddedToSlot(Player &player, uint16_t points, WheelSlots_t slotType) const {
-	return points == player.wheel()->getPointsBySlotType(slotType) && points == player.wheel()->getMaxPointsPerSlot(slotType);
+bool IOWheel::isMaxPointAddedToSlot(const std::shared_ptr<Player> &player, uint16_t points, WheelSlots_t slotType) const {
+	return points == player->wheel()->getPointsBySlotType(slotType) && points == player->wheel()->getMaxPointsPerSlot(slotType);
 }
 
 bool IOWheel::isKnight(uint8_t vocationId) const {
@@ -326,15 +330,15 @@ bool IOWheel::isDruid(uint8_t vocationId) const {
 	return vocationId == Vocation_t::VOCATION_DRUID_CIP;
 }
 
-void IOWheel::addSpell(Player &player, PlayerWheelMethodsBonusData &bonusData, WheelSlots_t slotType, uint16_t points, const std::string &spellName) const {
+void IOWheel::addSpell(const std::shared_ptr<Player> &player, PlayerWheelMethodsBonusData &bonusData, WheelSlots_t slotType, uint16_t points, const std::string &spellName) const {
 	if (isMaxPointAddedToSlot(player, points, slotType)) {
 		bonusData.spells.push_back(spellName);
 	}
 }
 
-void IOWheel::increaseResistance(Player &player, PlayerWheelMethodsBonusData &bonusData, WheelSlots_t slotType, uint16_t points, CombatType_t combat, int16_t value) const {
+void IOWheel::addVesselResonance(const std::shared_ptr<Player> &player, PlayerWheelMethodsBonusData &bonusData, WheelSlots_t slotType, WheelGemAffinity_t affinity, uint16_t points) const {
 	if (isMaxPointAddedToSlot(player, points, slotType)) {
-		bonusData.resistance[combatTypeToIndex(combat)] += value;
+		bonusData.unlockedVesselResonances[static_cast<uint8_t>(affinity)]++;
 	}
 }
 
@@ -384,7 +388,7 @@ void IOWheel::initializeWheelMapFunctions() {
 }
 
 // SLOT_GREEN_200 = 1
-void IOWheel::slotGreen200(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotGreen200(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	auto pointsInSlot = isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_GREEN_200);
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.health += 3 * points;
@@ -410,13 +414,15 @@ void IOWheel::slotGreen200(Player &player, uint16_t points, uint8_t vocationCipI
 }
 
 // SLOT_GREEN_TOP_150 = 2
-void IOWheel::slotGreenTop150(Player &player, uint16_t points, uint8_t, PlayerWheelMethodsBonusData &bonusData) const {
-	bonusData.mitigation += 0.03 * points;
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_GREEN_TOP_150, points, COMBAT_ICEDAMAGE, 200);
+void IOWheel::slotGreenTop150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t, PlayerWheelMethodsBonusData &bonusData) const {
+	bonusData.mitigation += MITIGATION_INCREASE * points;
+	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_GREEN_TOP_150)) {
+		bonusData.leech.manaLeech += MANA_LEECH_INCREASE;
+	}
 }
 
 // SLOT_GREEN_TOP_100 = 3
-void IOWheel::slotGreenTop100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotGreenTop100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.health += 3 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -424,13 +430,11 @@ void IOWheel::slotGreenTop100(Player &player, uint16_t points, uint8_t vocationC
 	} else {
 		bonusData.stats.health += 1 * points;
 	}
-	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_GREEN_TOP_100)) {
-		bonusData.leech.lifeLeech += 0.75;
-	}
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_GREEN_TOP_100, WheelGemAffinity_t::Green, points);
 }
 
 // SLOT_RED_TOP_100 = 4
-void IOWheel::slotRedTop100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotRedTop100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	auto pointsInSlot = isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_RED_TOP_100);
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.mana += 1 * points;
@@ -451,7 +455,7 @@ void IOWheel::slotRedTop100(Player &player, uint16_t points, uint8_t vocationCip
 }
 
 // SLOT_RED_TOP_150 = 5
-void IOWheel::slotRedTop150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotRedTop150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.health += 3 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -459,14 +463,11 @@ void IOWheel::slotRedTop150(Player &player, uint16_t points, uint8_t vocationCip
 	} else {
 		bonusData.stats.health += 1 * points;
 	}
-
-	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_RED_TOP_150)) {
-		bonusData.leech.manaLeech += 0.25; // 0,25%
-	}
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_RED_TOP_150, WheelGemAffinity_t::Red, points);
 }
 
 // SLOT_RED_200 = 6
-void IOWheel::slotRed200(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotRed200(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		addSpell(player, bonusData, WheelSlots_t::SLOT_RED_200, points, "Front Sweep");
 		bonusData.stats.health += 3 * points;
@@ -489,15 +490,13 @@ void IOWheel::slotRed200(Player &player, uint16_t points, uint8_t vocationCipId,
 }
 
 // SLOT_GREEN_BOTTOM_150 = 7
-void IOWheel::slotGreenBottom150(Player &player, uint16_t points, uint8_t, PlayerWheelMethodsBonusData &bonusData) const {
-	bonusData.mitigation += 0.03 * points; // 0,03%
-	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_GREEN_BOTTOM_150)) {
-		bonusData.leech.manaLeech += 0.25; // 0,25%
-	}
+void IOWheel::slotGreenBottom150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t, PlayerWheelMethodsBonusData &bonusData) const {
+	bonusData.mitigation += MITIGATION_INCREASE * points;
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_GREEN_BOTTOM_150, WheelGemAffinity_t::Green, points);
 }
 
 // SLOT_GREEN_MIDDLE_100 = 8
-void IOWheel::slotGreenMiddle100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotGreenMiddle100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		addSpell(player, bonusData, WheelSlots_t::SLOT_GREEN_MIDDLE_100, points, "Groundshaker");
 		bonusData.stats.health += 3 * points;
@@ -515,7 +514,7 @@ void IOWheel::slotGreenMiddle100(Player &player, uint16_t points, uint8_t vocati
 }
 
 // SLOT_GREEN_TOP_75 = 9
-void IOWheel::slotGreenTop75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotGreenTop75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.mana += 1 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -523,13 +522,13 @@ void IOWheel::slotGreenTop75(Player &player, uint16_t points, uint8_t vocationCi
 	} else {
 		bonusData.stats.mana += 6 * points;
 	}
-	// 1%
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_GREEN_TOP_75, points, COMBAT_HOLYDAMAGE, 100);
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_GREEN_TOP_75, points, COMBAT_DEATHDAMAGE, 100);
+	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_GREEN_TOP_75)) {
+		bonusData.leech.lifeLeech += HEALTH_LEECH_INCREASE;
+	}
 }
 
 // SLOT_RED_TOP_75 = 10
-void IOWheel::slotRedTop75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotRedTop75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.capacity += 5 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -537,12 +536,11 @@ void IOWheel::slotRedTop75(Player &player, uint16_t points, uint8_t vocationCipI
 	} else {
 		bonusData.stats.capacity += 2 * points;
 	}
-	// 2%
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_RED_TOP_75, points, COMBAT_ENERGYDAMAGE, 200);
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_RED_TOP_75, WheelGemAffinity_t::Red, points);
 }
 
 // SLOT_RED_MIDDLE_100 = 11
-void IOWheel::slotRedMiddle100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotRedMiddle100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		addSpell(player, bonusData, WheelSlots_t::SLOT_RED_MIDDLE_100, points, "Chivalrous Challenge");
 		bonusData.stats.mana += 1 * points;
@@ -560,7 +558,7 @@ void IOWheel::slotRedMiddle100(Player &player, uint16_t points, uint8_t vocation
 }
 
 // SLOT_RED_BOTTOM_150 = 12
-void IOWheel::slotRedBottom150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotRedBottom150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.health += 3 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -568,13 +566,13 @@ void IOWheel::slotRedBottom150(Player &player, uint16_t points, uint8_t vocation
 	} else {
 		bonusData.stats.health += 1 * points;
 	}
-	// 1%
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_RED_BOTTOM_150, points, COMBAT_HOLYDAMAGE, 100);
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_RED_BOTTOM_150, points, COMBAT_DEATHDAMAGE, 100);
+	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_RED_BOTTOM_150)) {
+		bonusData.leech.manaLeech += MANA_LEECH_INCREASE;
+	}
 }
 
 // SLOT_GREEN_BOTTOM_100 = 13
-void IOWheel::slotGreenBottom100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotGreenBottom100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		addSpell(player, bonusData, WheelSlots_t::SLOT_GREEN_BOTTOM_100, points, "Intense Wound Cleansing");
 		bonusData.stats.health += 3 * points;
@@ -592,7 +590,7 @@ void IOWheel::slotGreenBottom100(Player &player, uint16_t points, uint8_t vocati
 }
 
 // SLOT_GREEN_BOTTOM_75 = 14
-void IOWheel::slotGreenBottom75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotGreenBottom75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	auto pointsInSlot = isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_GREEN_BOTTOM_75);
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.mana += 1 * points;
@@ -613,7 +611,7 @@ void IOWheel::slotGreenBottom75(Player &player, uint16_t points, uint8_t vocatio
 }
 
 // SLOT_GREEN_50 = 15
-void IOWheel::slotGreen50(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotGreen50(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.capacity += 5 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -621,13 +619,12 @@ void IOWheel::slotGreen50(Player &player, uint16_t points, uint8_t vocationCipId
 	} else {
 		bonusData.stats.capacity += 2 * points;
 	}
-	// 2% of resistance
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_GREEN_50, points, COMBAT_EARTHDAMAGE, 200);
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_GREEN_50, WheelGemAffinity_t::Green, points);
 }
 
 // SLOT_RED_50 = 16
-void IOWheel::slotRed50(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
-	bonusData.mitigation += 0.03 * points; // 0,03%
+void IOWheel::slotRed50(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+	bonusData.mitigation += MITIGATION_INCREASE * points;
 	if (isKnight(vocationCipId)) {
 		addSpell(player, bonusData, WheelSlots_t::SLOT_RED_50, points, "Fierce Berserk");
 	} else if (isPaladin(vocationCipId)) {
@@ -640,7 +637,7 @@ void IOWheel::slotRed50(Player &player, uint16_t points, uint8_t vocationCipId, 
 }
 
 // SLOT_RED_BOTTOM_75 = 17
-void IOWheel::slotRedBottom75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotRedBottom75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.capacity += 5 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -649,12 +646,12 @@ void IOWheel::slotRedBottom75(Player &player, uint16_t points, uint8_t vocationC
 		bonusData.stats.capacity += 2 * points;
 	}
 	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_RED_BOTTOM_75)) {
-		bonusData.leech.lifeLeech += 0.75; // 0,75%
+		bonusData.leech.lifeLeech += HEALTH_LEECH_INCREASE;
 	}
 }
 
 // SLOT_RED_BOTTOM_100 = 18
-void IOWheel::slotRedBottom100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotRedBottom100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.mana += 1 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -662,18 +659,17 @@ void IOWheel::slotRedBottom100(Player &player, uint16_t points, uint8_t vocation
 	} else {
 		bonusData.stats.mana += 6 * points;
 	}
-	// Increase 2% of fire elemental damage resistance
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_RED_BOTTOM_100, points, COMBAT_FIREDAMAGE, 200);
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_RED_BOTTOM_100, WheelGemAffinity_t::Red, points);
 }
 
 // SLOT_BLUE_TOP_100 = 19
-void IOWheel::slotBlueTop100(Player &player, uint16_t points, uint8_t, PlayerWheelMethodsBonusData &bonusData) const {
-	bonusData.mitigation += 0.03 * points; // 0,03%
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_BLUE_TOP_100, points, COMBAT_ENERGYDAMAGE, 200);
+void IOWheel::slotBlueTop100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t, PlayerWheelMethodsBonusData &bonusData) const {
+	bonusData.mitigation += MITIGATION_INCREASE * points;
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_BLUE_TOP_100, WheelGemAffinity_t::Blue, points);
 }
 
 // SLOT_BLUE_TOP_75 = 20
-void IOWheel::slotBlueTop75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotBlueTop75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.health += 3 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -682,12 +678,12 @@ void IOWheel::slotBlueTop75(Player &player, uint16_t points, uint8_t vocationCip
 		bonusData.stats.health += 1 * points;
 	}
 	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_BLUE_TOP_75)) {
-		bonusData.leech.manaLeech += 0.25; // 0,25%
+		bonusData.leech.manaLeech += MANA_LEECH_INCREASE;
 	}
 }
 
 // SLOT_BLUE_50 = 21
-void IOWheel::slotBlue50(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotBlue50(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		addSpell(player, bonusData, WheelSlots_t::SLOT_BLUE_50, points, "Front Sweep");
 		bonusData.stats.mana += 1 * points;
@@ -707,7 +703,7 @@ void IOWheel::slotBlue50(Player &player, uint16_t points, uint8_t vocationCipId,
 }
 
 // SLOT_PURPLE_50 = 22
-void IOWheel::slotPurple50(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotPurple50(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.health += 3 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -715,13 +711,12 @@ void IOWheel::slotPurple50(Player &player, uint16_t points, uint8_t vocationCipI
 	} else {
 		bonusData.stats.health += 1 * points;
 	}
-	// Increase 2% of resistance
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_PURPLE_50, points, COMBAT_ICEDAMAGE, 200);
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_PURPLE_50, WheelGemAffinity_t::Purple, points);
 }
 
 // SLOT_PURPLE_TOP_75 = 23
-void IOWheel::slotPurpleTop75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
-	bonusData.mitigation += 0.03 * points; // 0,03%
+void IOWheel::slotPurpleTop75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+	bonusData.mitigation += MITIGATION_INCREASE * points;
 	auto pointsInSlot = isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_PURPLE_TOP_75);
 	if (isKnight(vocationCipId)) {
 		if (pointsInSlot) {
@@ -739,7 +734,7 @@ void IOWheel::slotPurpleTop75(Player &player, uint16_t points, uint8_t vocationC
 }
 
 // SLOT_PURPLE_TOP_100 = 24
-void IOWheel::slotPurpleTop100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotPurpleTop100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		addSpell(player, bonusData, WheelSlots_t::SLOT_PURPLE_TOP_100, points, "Groundshaker");
 		bonusData.stats.capacity += 5 * points;
@@ -757,7 +752,7 @@ void IOWheel::slotPurpleTop100(Player &player, uint16_t points, uint8_t vocation
 }
 
 // SLOT_BLUE_TOP_150 = 25
-void IOWheel::slotBlueTop150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotBlueTop150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.capacity += 5 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -765,15 +760,14 @@ void IOWheel::slotBlueTop150(Player &player, uint16_t points, uint8_t vocationCi
 	} else {
 		bonusData.stats.capacity += 2 * points;
 	}
-	// Increase 1% of resistance for holy
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_BLUE_TOP_150, points, COMBAT_HOLYDAMAGE, 100);
-	// Increase 1% of resistance for death
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_BLUE_TOP_150, points, COMBAT_DEATHDAMAGE, 100);
+	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_BLUE_TOP_150)) {
+		bonusData.leech.lifeLeech += HEALTH_LEECH_INCREASE;
+	}
 }
 
 // SLOT_BLUE_MIDDLE_100 = 26
-void IOWheel::slotBlueMiddle100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
-	bonusData.mitigation += 0.03 * points; // 0,03%
+void IOWheel::slotBlueMiddle100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+	bonusData.mitigation += MITIGATION_INCREASE * points;
 	if (isKnight(vocationCipId)) {
 		addSpell(player, bonusData, WheelSlots_t::SLOT_BLUE_MIDDLE_100, points, "Chivalrous Challenge");
 	} else if (isPaladin(vocationCipId)) {
@@ -788,7 +782,7 @@ void IOWheel::slotBlueMiddle100(Player &player, uint16_t points, uint8_t vocatio
 }
 
 // SLOT_BLUE_BOTTOM_75 = 27
-void IOWheel::slotBlueBottom75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotBlueBottom75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.health += 3 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -796,19 +790,19 @@ void IOWheel::slotBlueBottom75(Player &player, uint16_t points, uint8_t vocation
 	} else {
 		bonusData.stats.health += 1 * points;
 	}
-	// Increase 2% resistance of fire damage
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_BLUE_BOTTOM_75, points, COMBAT_FIREDAMAGE, 200);
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_BLUE_BOTTOM_75, WheelGemAffinity_t::Blue, points);
 }
 
 // SLOT_PURPLE_BOTTOM_75 = 28
-void IOWheel::slotPurpleBottom75(Player &player, uint16_t points, uint8_t, PlayerWheelMethodsBonusData &bonusData) const {
-	bonusData.mitigation += 0.03 * points; // 0,03%
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_PURPLE_BOTTOM_75, points, COMBAT_HOLYDAMAGE, 100);
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_PURPLE_BOTTOM_75, points, COMBAT_DEATHDAMAGE, 100);
+void IOWheel::slotPurpleBottom75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t, PlayerWheelMethodsBonusData &bonusData) const {
+	bonusData.mitigation += MITIGATION_INCREASE * points;
+	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_PURPLE_BOTTOM_75)) {
+		bonusData.leech.manaLeech += MANA_LEECH_INCREASE;
+	}
 }
 
 // SLOT_PURPLE_MIDDLE_100 = 29
-void IOWheel::slotPurpleMiddle100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotPurpleMiddle100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		addSpell(player, bonusData, WheelSlots_t::SLOT_PURPLE_MIDDLE_100, points, "Intense Wound Cleansing");
 		bonusData.stats.capacity += 5 * points;
@@ -826,7 +820,7 @@ void IOWheel::slotPurpleMiddle100(Player &player, uint16_t points, uint8_t vocat
 }
 
 // SLOT_PURPLE_TOP_150 = 30
-void IOWheel::slotPurpleTop150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotPurpleTop150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.mana += 1 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -834,13 +828,11 @@ void IOWheel::slotPurpleTop150(Player &player, uint16_t points, uint8_t vocation
 	} else {
 		bonusData.stats.mana += 6 * points;
 	}
-	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_PURPLE_TOP_150)) {
-		bonusData.leech.lifeLeech += 0.75; // 0,75%
-	}
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_PURPLE_TOP_150, WheelGemAffinity_t::Purple, points);
 }
 
 // SLOT_BLUE_200 = 31
-void IOWheel::slotBlue200(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotBlue200(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		addSpell(player, bonusData, WheelSlots_t::SLOT_BLUE_200, points, "Fierce Berserk");
 		bonusData.stats.health += 3 * points;
@@ -861,7 +853,7 @@ void IOWheel::slotBlue200(Player &player, uint16_t points, uint8_t vocationCipId
 }
 
 // SLOT_BLUE_BOTTOM_150 = 32
-void IOWheel::slotBlueBottom150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotBlueBottom150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.capacity += 5 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -869,14 +861,12 @@ void IOWheel::slotBlueBottom150(Player &player, uint16_t points, uint8_t vocatio
 	} else {
 		bonusData.stats.capacity += 2 * points;
 	}
-	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_BLUE_BOTTOM_150)) {
-		bonusData.leech.lifeLeech += 0.75; // 0,75%
-	}
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_BLUE_BOTTOM_150, WheelGemAffinity_t::Blue, points);
 }
 
 // SLOT_BLUE_BOTTOM_100 = 33
-void IOWheel::slotBlueBottom100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
-	bonusData.mitigation += 0.03 * points; // 0,03%
+void IOWheel::slotBlueBottom100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+	bonusData.mitigation += MITIGATION_INCREASE * points;
 	bool onSlot = isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_BLUE_BOTTOM_100);
 	if (isKnight(vocationCipId) && onSlot) {
 		bonusData.skills.melee += 1;
@@ -888,7 +878,7 @@ void IOWheel::slotBlueBottom100(Player &player, uint16_t points, uint8_t vocatio
 }
 
 // SLOT_PURPLE_BOTTOM_100 = 34
-void IOWheel::slotPurpleBottom100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotPurpleBottom100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.capacity += 5 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -896,13 +886,11 @@ void IOWheel::slotPurpleBottom100(Player &player, uint16_t points, uint8_t vocat
 	} else {
 		bonusData.stats.capacity += 2 * points;
 	}
-	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_PURPLE_BOTTOM_100)) {
-		bonusData.leech.manaLeech += 0.25; // 0,25%
-	}
+	addVesselResonance(player, bonusData, WheelSlots_t::SLOT_PURPLE_BOTTOM_100, WheelGemAffinity_t::Purple, points);
 }
 
 // SLOT_PURPLE_BOTTOM_150 = 35
-void IOWheel::slotPurpleBottom150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotPurpleBottom150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.mana += 1 * points;
 	} else if (isPaladin(vocationCipId)) {
@@ -910,12 +898,13 @@ void IOWheel::slotPurpleBottom150(Player &player, uint16_t points, uint8_t vocat
 	} else {
 		bonusData.stats.mana += 6 * points;
 	}
-	// Increase 2% of earth resistance
-	increaseResistance(player, bonusData, WheelSlots_t::SLOT_PURPLE_BOTTOM_150, points, COMBAT_EARTHDAMAGE, 200);
+	if (isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_PURPLE_BOTTOM_150)) {
+		bonusData.leech.lifeLeech += HEALTH_LEECH_INCREASE;
+	}
 }
 
 // SLOT_PURPLE_200 = 36
-void IOWheel::slotPurple200(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
+void IOWheel::slotPurple200(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const {
 	bool isPointsAtSlot = isMaxPointAddedToSlot(player, points, WheelSlots_t::SLOT_PURPLE_200);
 	if (isKnight(vocationCipId)) {
 		bonusData.stats.health += 3 * points;

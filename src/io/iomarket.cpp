@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -13,16 +13,47 @@
 #include "database/databasetasks.hpp"
 #include "io/iologindata.hpp"
 #include "game/game.hpp"
-#include "game/scheduling/scheduler.hpp"
+#include "game/scheduling/dispatcher.hpp"
+#include "game/scheduling/save_manager.hpp"
 
 uint8_t IOMarket::getTierFromDatabaseTable(const std::string &string) {
 	auto tier = static_cast<uint8_t>(std::atoi(string.c_str()));
-	if (tier > g_configManager().getNumber(FORGE_MAX_ITEM_TIER)) {
+	if (tier > g_configManager().getNumber(FORGE_MAX_ITEM_TIER, __FUNCTION__)) {
 		g_logger().error("{} - Failed to get number value {} for tier table result", __FUNCTION__, tier);
 		return 0;
 	}
 
 	return tier;
+}
+
+MarketOfferList IOMarket::getActiveOffers(MarketAction_t action) {
+	MarketOfferList offerList;
+
+	std::ostringstream query;
+	query << "SELECT `id`, `amount`, `price`, `tier`, `created`, `anonymous`, (SELECT `name` FROM `players` WHERE `id` = `player_id`) AS `player_name` FROM `market_offers` WHERE `sale` = " << action;
+
+	DBResult_ptr result = Database::getInstance().storeQuery(query.str());
+	if (!result) {
+		return offerList;
+	}
+
+	const int32_t marketOfferDuration = g_configManager().getNumber(MARKET_OFFER_DURATION, __FUNCTION__);
+
+	do {
+		MarketOffer offer;
+		offer.amount = result->getNumber<uint16_t>("amount");
+		offer.price = result->getNumber<uint64_t>("price");
+		offer.timestamp = result->getNumber<uint32_t>("created") + marketOfferDuration;
+		offer.counter = result->getNumber<uint32_t>("id") & 0xFFFF;
+		if (result->getNumber<uint16_t>("anonymous") == 0) {
+			offer.playerName = result->getString("player_name");
+		} else {
+			offer.playerName = "Anonymous";
+		}
+		offer.tier = getTierFromDatabaseTable(result->getString("tier"));
+		offerList.push_back(offer);
+	} while (result->next());
+	return offerList;
 }
 
 MarketOfferList IOMarket::getActiveOffers(MarketAction_t action, uint16_t itemId, uint8_t tier) {
@@ -36,7 +67,7 @@ MarketOfferList IOMarket::getActiveOffers(MarketAction_t action, uint16_t itemId
 		return offerList;
 	}
 
-	const int32_t marketOfferDuration = g_configManager().getNumber(MARKET_OFFER_DURATION);
+	const int32_t marketOfferDuration = g_configManager().getNumber(MARKET_OFFER_DURATION, __FUNCTION__);
 
 	do {
 		MarketOffer offer;
@@ -58,7 +89,7 @@ MarketOfferList IOMarket::getActiveOffers(MarketAction_t action, uint16_t itemId
 MarketOfferList IOMarket::getOwnOffers(MarketAction_t action, uint32_t playerId) {
 	MarketOfferList offerList;
 
-	const int32_t marketOfferDuration = g_configManager().getNumber(MARKET_OFFER_DURATION);
+	const int32_t marketOfferDuration = g_configManager().getNumber(MARKET_OFFER_DURATION, __FUNCTION__);
 
 	std::ostringstream query;
 	query << "SELECT `id`, `amount`, `price`, `created`, `itemtype`, `tier` FROM `market_offers` WHERE `player_id` = " << playerId << " AND `sale` = " << action;
@@ -131,23 +162,19 @@ void IOMarket::processExpiredOffers(DBResult_ptr result, bool) {
 				continue;
 			}
 
-			Player* player = g_game().getPlayerByGUID(playerId);
+			std::shared_ptr<Player> player = g_game().getPlayerByGUID(playerId, true);
 			if (!player) {
-				player = new Player(nullptr);
-				if (!IOLoginData::loadPlayerById(player, playerId)) {
-					delete player;
-					continue;
-				}
+				continue;
 			}
 
 			if (itemType.stackable) {
 				uint16_t tmpAmount = amount;
 				while (tmpAmount > 0) {
 					uint16_t stackCount = std::min<uint16_t>(100, tmpAmount);
-					Item* item = Item::CreateItem(itemType.id, stackCount);
+					std::shared_ptr<Item> item = Item::CreateItem(itemType.id, stackCount);
 					if (g_game().internalAddItem(player->getInbox(), item, INDEX_WHEREEVER, FLAG_NOLIMIT) != RETURNVALUE_NOERROR) {
 						g_logger().error("[{}] Ocurred an error to add item with id {} to player {}", __FUNCTION__, itemType.id, player->getName());
-						delete item;
+
 						break;
 					}
 
@@ -166,9 +193,8 @@ void IOMarket::processExpiredOffers(DBResult_ptr result, bool) {
 				}
 
 				for (uint16_t i = 0; i < amount; ++i) {
-					Item* item = Item::CreateItem(itemType.id, subType);
+					std::shared_ptr<Item> item = Item::CreateItem(itemType.id, subType);
 					if (g_game().internalAddItem(player->getInbox(), item, INDEX_WHEREEVER, FLAG_NOLIMIT) != RETURNVALUE_NOERROR) {
-						delete item;
 						break;
 					}
 
@@ -179,13 +205,12 @@ void IOMarket::processExpiredOffers(DBResult_ptr result, bool) {
 			}
 
 			if (player->isOffline()) {
-				IOLoginData::savePlayer(player);
-				delete player;
+				g_saveManager().savePlayer(player);
 			}
 		} else {
 			uint64_t totalPrice = result->getNumber<uint64_t>("price") * amount;
 
-			Player* player = g_game().getPlayerByGUID(playerId);
+			std::shared_ptr<Player> player = g_game().getPlayerByGUID(playerId);
 			if (player) {
 				player->setBankBalance(player->getBankBalance() + totalPrice);
 			} else {
@@ -196,18 +221,18 @@ void IOMarket::processExpiredOffers(DBResult_ptr result, bool) {
 }
 
 void IOMarket::checkExpiredOffers() {
-	const time_t lastExpireDate = getTimeNow() - g_configManager().getNumber(MARKET_OFFER_DURATION);
+	const time_t lastExpireDate = getTimeNow() - g_configManager().getNumber(MARKET_OFFER_DURATION, __FUNCTION__);
 
 	std::ostringstream query;
 	query << "SELECT `id`, `amount`, `price`, `itemtype`, `player_id`, `sale`, `tier` FROM `market_offers` WHERE `created` <= " << lastExpireDate;
 	g_databaseTasks().store(query.str(), IOMarket::processExpiredOffers);
 
-	int32_t checkExpiredMarketOffersEachMinutes = g_configManager().getNumber(CHECK_EXPIRED_MARKET_OFFERS_EACH_MINUTES);
+	int32_t checkExpiredMarketOffersEachMinutes = g_configManager().getNumber(CHECK_EXPIRED_MARKET_OFFERS_EACH_MINUTES, __FUNCTION__);
 	if (checkExpiredMarketOffersEachMinutes <= 0) {
 		return;
 	}
 
-	g_scheduler().addEvent(checkExpiredMarketOffersEachMinutes * 60 * 1000, IOMarket::checkExpiredOffers, __FUNCTION__);
+	g_dispatcher().scheduleEvent(checkExpiredMarketOffersEachMinutes * 60 * 1000, IOMarket::checkExpiredOffers, __FUNCTION__);
 }
 
 uint32_t IOMarket::getPlayerOfferCount(uint32_t playerId) {
@@ -224,7 +249,7 @@ uint32_t IOMarket::getPlayerOfferCount(uint32_t playerId) {
 MarketOfferEx IOMarket::getOfferByCounter(uint32_t timestamp, uint16_t counter) {
 	MarketOfferEx offer;
 
-	const int32_t created = timestamp - g_configManager().getNumber(MARKET_OFFER_DURATION);
+	const int32_t created = timestamp - g_configManager().getNumber(MARKET_OFFER_DURATION, __FUNCTION__);
 
 	std::ostringstream query;
 	query << "SELECT `id`, `sale`, `itemtype`, `amount`, `created`, `price`, `player_id`, `anonymous`, `tier`, (SELECT `name` FROM `players` WHERE `id` = `player_id`) AS `player_name` FROM `market_offers` WHERE `created` = " << created << " AND (`id` & 65535) = " << counter << " LIMIT 1";

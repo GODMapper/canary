@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -12,11 +12,18 @@
 #include "declarations.hpp"
 #include "lib/logging/log_with_spd_log.hpp"
 
+#ifndef USE_PRECOMPILED_HEADERS
+	#include <mysql/mysql.h>
+	#include <mutex>
+#endif
+
 class DBResult;
 using DBResult_ptr = std::shared_ptr<DBResult>;
 
 class Database {
 public:
+	static const size_t MAX_QUERY_SIZE = 8 * 1024 * 1024; // 8 Mb -- half the default MySQL max_allowed_packet size
+
 	Database() = default;
 	~Database();
 
@@ -56,9 +63,7 @@ private:
 	bool rollback();
 	bool commit();
 
-	bool isRecoverableError(unsigned int error) const {
-		return error == CR_SERVER_LOST || error == CR_SERVER_GONE_ERROR || error == CR_CONN_HOST_ERROR || error == 1053 /*ER_SERVER_SHUTDOWN*/ || error == CR_CONNECTION_ERROR;
-	}
+	bool isRecoverableError(unsigned int error) const;
 
 	MYSQL* handle = nullptr;
 	std::recursive_mutex databaseLock;
@@ -66,6 +71,8 @@ private:
 
 	friend class DBTransaction;
 };
+
+constexpr auto g_database = Database::getInstance;
 
 class DBResult {
 public:

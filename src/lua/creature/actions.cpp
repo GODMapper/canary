@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -15,6 +15,7 @@
 #include "game/game.hpp"
 #include "creatures/combat/spells.hpp"
 #include "items/containers/rewards/rewardchest.hpp"
+#include "enums/account_group_type.hpp"
 
 Actions::Actions() = default;
 Actions::~Actions() = default;
@@ -166,7 +167,7 @@ bool Actions::registerLuaEvent(const std::shared_ptr<Action> action) {
 	return false;
 }
 
-ReturnValue Actions::canUse(const Player* player, const Position &pos) {
+ReturnValue Actions::canUse(std::shared_ptr<Player> player, const Position &pos) {
 	if (pos.x != 0xFFFF) {
 		const Position &playerPos = player->getPosition();
 		if (playerPos.z != pos.z) {
@@ -180,7 +181,7 @@ ReturnValue Actions::canUse(const Player* player, const Position &pos) {
 	return RETURNVALUE_NOERROR;
 }
 
-ReturnValue Actions::canUse(const Player* player, const Position &pos, const Item* item) {
+ReturnValue Actions::canUse(std::shared_ptr<Player> player, const Position &pos, std::shared_ptr<Item> item) {
 	const std::shared_ptr<Action> action = getAction(item);
 	if (action != nullptr) {
 		return action->canExecuteAction(player, pos);
@@ -188,7 +189,7 @@ ReturnValue Actions::canUse(const Player* player, const Position &pos, const Ite
 	return RETURNVALUE_NOERROR;
 }
 
-ReturnValue Actions::canUseFar(const Creature* creature, const Position &toPos, bool checkLineOfSight, bool checkFloor) {
+ReturnValue Actions::canUseFar(std::shared_ptr<Creature> creature, const Position &toPos, bool checkLineOfSight, bool checkFloor) {
 	if (toPos.x == 0xFFFF) {
 		return RETURNVALUE_NOERROR;
 	}
@@ -209,7 +210,7 @@ ReturnValue Actions::canUseFar(const Creature* creature, const Position &toPos, 
 	return RETURNVALUE_NOERROR;
 }
 
-std::shared_ptr<Action> Actions::getAction(const Item* item) {
+std::shared_ptr<Action> Actions::getAction(std::shared_ptr<Item> item) {
 	if (item->hasAttribute(ItemAttribute_t::UNIQUEID)) {
 		auto it = uniqueItemMap.find(item->getAttribute<uint16_t>(ItemAttribute_t::UNIQUEID));
 		if (it != uniqueItemMap.end()) {
@@ -231,9 +232,9 @@ std::shared_ptr<Action> Actions::getAction(const Item* item) {
 
 	if (auto iteratePositions = actionPositionMap.find(item->getPosition());
 		iteratePositions != actionPositionMap.end()) {
-		if (const Tile* tile = item->getTile();
+		if (std::shared_ptr<Tile> tile = item->getTile();
 			tile) {
-			if (const Player* player = item->getHoldingPlayer();
+			if (std::shared_ptr<Player> player = item->getHoldingPlayer();
 				player && item->getTopParent() == player) {
 				g_logger().debug("[Actions::getAction] - The position only is valid for use item in the map, player name {}", player->getName());
 				return nullptr;
@@ -247,8 +248,8 @@ std::shared_ptr<Action> Actions::getAction(const Item* item) {
 	return g_spells().getRuneSpell(item->getID());
 }
 
-ReturnValue Actions::internalUseItem(Player* player, const Position &pos, uint8_t index, Item* item, bool isHotkey) {
-	if (Door* door = item->getDoor()) {
+ReturnValue Actions::internalUseItem(std::shared_ptr<Player> player, const Position &pos, uint8_t index, std::shared_ptr<Item> item, bool isHotkey) {
+	if (std::shared_ptr<Door> door = item->getDoor()) {
 		if (!door->canUse(player)) {
 			return RETURNVALUE_CANNOTUSETHISOBJECT;
 		}
@@ -282,7 +283,7 @@ ReturnValue Actions::internalUseItem(Player* player, const Position &pos, uint8_
 		}
 	}
 
-	if (BedItem* bed = item->getBed()) {
+	if (std::shared_ptr<BedItem> bed = item->getBed()) {
 		if (!bed->canUse(player)) {
 			return RETURNVALUE_CANNOTUSETHISOBJECT;
 		}
@@ -295,12 +296,12 @@ ReturnValue Actions::internalUseItem(Player* player, const Position &pos, uint8_
 		return RETURNVALUE_NOERROR;
 	}
 
-	if (Container* container = item->getContainer()) {
-		Container* openContainer;
+	if (std::shared_ptr<Container> container = item->getContainer()) {
+		std::shared_ptr<Container> openContainer;
 
 		// depot container
-		if (DepotLocker* depot = container->getDepotLocker()) {
-			DepotLocker* myDepotLocker = player->getDepotLocker(depot->getDepotId());
+		if (std::shared_ptr<DepotLocker> depot = container->getDepotLocker()) {
+			std::shared_ptr<DepotLocker> myDepotLocker = player->getDepotLocker(depot->getDepotId());
 			myDepotLocker->setParent(depot->getParent()->getTile());
 			openContainer = myDepotLocker;
 			player->setLastDepotId(depot->getDepotId());
@@ -310,7 +311,11 @@ ReturnValue Actions::internalUseItem(Player* player, const Position &pos, uint8_
 
 		// reward chest
 		if (container->getRewardChest() != nullptr && container->getParent()) {
-			RewardChest* playerRewardChest = player->getRewardChest();
+			if (!player->hasOtherRewardContainerOpen(container->getParent()->getContainer())) {
+				player->removeEmptyRewards();
+			}
+
+			std::shared_ptr<RewardChest> playerRewardChest = player->getRewardChest();
 			if (playerRewardChest->empty()) {
 				return RETURNVALUE_REWARDCHESTISEMPTY;
 			}
@@ -340,7 +345,7 @@ ReturnValue Actions::internalUseItem(Player* player, const Position &pos, uint8_
 		uint32_t corpseOwner = container->getCorpseOwner();
 		if (container->isRewardCorpse()) {
 			// only players who participated in the fight can open the corpse
-			if (player->getGroup()->id >= account::GROUP_TYPE_GAMEMASTER) {
+			if (player->getGroup()->id >= GROUP_TYPE_GAMEMASTER) {
 				return RETURNVALUE_YOUCANTOPENCORPSEADM;
 			}
 			auto reward = player->getReward(rewardId, false);
@@ -383,7 +388,7 @@ ReturnValue Actions::internalUseItem(Player* player, const Position &pos, uint8_
 	return RETURNVALUE_CANNOTUSETHISOBJECT;
 }
 
-bool Actions::useItem(Player* player, const Position &pos, uint8_t index, Item* item, bool isHotkey) {
+bool Actions::useItem(std::shared_ptr<Player> player, const Position &pos, uint8_t index, std::shared_ptr<Item> item, bool isHotkey) {
 	const ItemType &it = Item::items[item->getID()];
 	if (it.isRune() || it.type == ITEM_TYPE_POTION) {
 		if (player->walkExhausted()) {
@@ -403,19 +408,19 @@ bool Actions::useItem(Player* player, const Position &pos, uint8_t index, Item* 
 	}
 
 	if (it.isRune() || it.type == ITEM_TYPE_POTION) {
-		player->setNextPotionAction(OTSYS_TIME() + g_configManager().getNumber(ACTIONS_DELAY_INTERVAL));
+		player->setNextPotionAction(OTSYS_TIME() + g_configManager().getNumber(ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	} else {
-		player->setNextAction(OTSYS_TIME() + g_configManager().getNumber(ACTIONS_DELAY_INTERVAL));
+		player->setNextAction(OTSYS_TIME() + g_configManager().getNumber(ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	}
 
 	// only send cooldown icon if it's an multi use item
 	if (it.isMultiUse()) {
-		player->sendUseItemCooldown(g_configManager().getNumber(ACTIONS_DELAY_INTERVAL));
+		player->sendUseItemCooldown(g_configManager().getNumber(ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	}
 	return true;
 }
 
-bool Actions::useItemEx(Player* player, const Position &fromPos, const Position &toPos, uint8_t toStackPos, Item* item, bool isHotkey, Creature* creature /* = nullptr*/) {
+bool Actions::useItemEx(std::shared_ptr<Player> player, const Position &fromPos, const Position &toPos, uint8_t toStackPos, std::shared_ptr<Item> item, bool isHotkey, std::shared_ptr<Creature> creature /* = nullptr*/) {
 	const ItemType &it = Item::items[item->getID()];
 	if (it.isRune() || it.type == ITEM_TYPE_POTION) {
 		if (player->walkExhausted()) {
@@ -456,18 +461,18 @@ bool Actions::useItemEx(Player* player, const Position &fromPos, const Position 
 	}
 
 	if (it.isRune() || it.type == ITEM_TYPE_POTION) {
-		player->setNextPotionAction(OTSYS_TIME() + g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL));
+		player->setNextPotionAction(OTSYS_TIME() + g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	} else {
-		player->setNextAction(OTSYS_TIME() + g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL));
+		player->setNextAction(OTSYS_TIME() + g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	}
 
 	if (it.isMultiUse()) {
-		player->sendUseItemCooldown(g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL));
+		player->sendUseItemCooldown(g_configManager().getNumber(EX_ACTIONS_DELAY_INTERVAL, __FUNCTION__));
 	}
 	return true;
 }
 
-void Actions::showUseHotkeyMessage(Player* player, const Item* item, uint32_t count) {
+void Actions::showUseHotkeyMessage(std::shared_ptr<Player> player, std::shared_ptr<Item> item, uint32_t count) {
 	std::ostringstream ss;
 
 	const ItemType &it = Item::items[item->getID()];
@@ -491,7 +496,7 @@ void Actions::showUseHotkeyMessage(Player* player, const Item* item, uint32_t co
 Action::Action(LuaScriptInterface* interface) :
 	Script(interface) { }
 
-ReturnValue Action::canExecuteAction(const Player* player, const Position &toPos) {
+ReturnValue Action::canExecuteAction(std::shared_ptr<Player> player, const Position &toPos) {
 	if (!allowFarUse) {
 		return g_actions().canUse(player, toPos);
 	}
@@ -499,14 +504,14 @@ ReturnValue Action::canExecuteAction(const Player* player, const Position &toPos
 	return g_actions().canUseFar(player, toPos, checkLineOfSight, checkFloor);
 }
 
-Thing* Action::getTarget(Player* player, Creature* targetCreature, const Position &toPosition, uint8_t toStackPos) const {
+std::shared_ptr<Thing> Action::getTarget(std::shared_ptr<Player> player, std::shared_ptr<Creature> targetCreature, const Position &toPosition, uint8_t toStackPos) const {
 	if (targetCreature != nullptr) {
 		return targetCreature;
 	}
 	return g_game().internalGetThing(player, toPosition, toStackPos, 0, STACKPOS_USETARGET);
 }
 
-bool Action::executeUse(Player* player, Item* item, const Position &fromPosition, Thing* target, const Position &toPosition, bool isHotkey) {
+bool Action::executeUse(std::shared_ptr<Player> player, std::shared_ptr<Item> item, const Position &fromPosition, std::shared_ptr<Thing> target, const Position &toPosition, bool isHotkey) {
 	// onUse(player, item, fromPosition, target, toPosition, isHotkey)
 	if (!getScriptInterface()->reserveScriptEnv()) {
 		g_logger().error("[Action::executeUse - Player {}, on item {}] "

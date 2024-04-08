@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -78,8 +78,14 @@ public:
 	template <typename CallbackFunc, typename... Args>
 	void executeCallback(EventCallback_t eventType, CallbackFunc callbackFunc, Args &&... args) {
 		for (const auto &callback : getCallbacksByType(eventType)) {
+			auto argsCopy = std::make_tuple(args...);
 			if (callback && callback->isLoadedCallback()) {
-				((*callback).*callbackFunc)(std::forward<Args>(args)...);
+				std::apply(
+					[&callback, &callbackFunc](auto &&... args) {
+						((*callback).*callbackFunc)(std::forward<decltype(args)>(args)...);
+					},
+					argsCopy
+				);
 			}
 		}
 	}
@@ -96,8 +102,14 @@ public:
 		bool allCallbacksSucceeded = true;
 
 		for (const auto &callback : getCallbacksByType(eventType)) {
-			if (callback && callback->isLoadedCallback()) { // Verifique se o callback é não nulo
-				bool callbackResult = ((*callback).*callbackFunc)(std::forward<Args>(args)...);
+			auto argsCopy = std::make_tuple(args...);
+			if (callback && callback->isLoadedCallback()) {
+				bool callbackResult = std::apply(
+					[&callback, &callbackFunc](auto &&... args) {
+						return ((*callback).*callbackFunc)(std::forward<decltype(args)>(args)...);
+					},
+					argsCopy
+				);
 				allCallbacksSucceeded = allCallbacksSucceeded && callbackResult;
 			}
 		}

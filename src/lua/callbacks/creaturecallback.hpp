@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -9,26 +9,25 @@
 
 #pragma once
 
-#include "pch.hpp"
 #include "creatures/creature.hpp"
 
 class Creature;
 
 class CreatureCallback {
 public:
-	CreatureCallback(LuaScriptInterface* scriptInterface, Creature* targetCreature) :
-		scriptInterface(scriptInterface), targetCreature(targetCreature) {};
+	CreatureCallback(LuaScriptInterface* scriptInterface, std::shared_ptr<Creature> targetCreature) :
+		scriptInterface(scriptInterface), m_targetCreature(targetCreature) {};
 	~CreatureCallback() { }
 
 	bool startScriptInterface(int32_t scriptId);
 
-	void pushSpecificCreature(Creature* creature);
+	void pushSpecificCreature(std::shared_ptr<Creature> creature);
 
 	bool persistLuaState() {
 		return params > 0 && scriptInterface->callFunction(params);
 	}
 
-	void pushCreature(Creature* creature) {
+	void pushCreature(std::shared_ptr<Creature> creature) {
 		params++;
 		LuaScriptInterface::pushUserdata<Creature>(L, creature);
 		LuaScriptInterface::setCreatureMetatable(L, -1, creature);
@@ -55,11 +54,11 @@ public:
 	}
 
 protected:
-	static std::string getCreatureClass(Creature* creature);
+	static std::string getCreatureClass(std::shared_ptr<Creature> creature);
 
 private:
 	LuaScriptInterface* scriptInterface;
-	Creature* targetCreature;
+	std::weak_ptr<Creature> m_targetCreature;
 	uint32_t params = 0;
 	lua_State* L = nullptr;
 };

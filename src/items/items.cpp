@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -12,8 +12,11 @@
 #include "items/functions/item/item_parse.hpp"
 #include "items/items.hpp"
 #include "items/weapons/weapons.hpp"
+#include "lua/creature/movement.hpp"
 #include "game/game.hpp"
 #include "utils/pugicast.hpp"
+
+#include <appearances.pb.h>
 
 Items::Items() = default;
 
@@ -22,6 +25,8 @@ void Items::clear() {
 	ladders.clear();
 	dummys.clear();
 	nameToItems.clear();
+	g_moveEvents().clear(true);
+	g_weapons().clear(true);
 }
 
 using LootTypeNames = phmap::flat_hash_map<std::string, ItemTypes_t>;
@@ -76,9 +81,9 @@ bool Items::reload() {
 void Items::loadFromProtobuf() {
 	using namespace Canary::protobuf::appearances;
 
-	bool supportAnimation = g_configManager().getBoolean(OLD_PROTOCOL);
-	for (uint32_t it = 0; it < g_game().appearances.object_size(); ++it) {
-		Appearance object = g_game().appearances.object(it);
+	bool supportAnimation = g_configManager().getBoolean(OLD_PROTOCOL, __FUNCTION__);
+	for (uint32_t it = 0; it < g_game().m_appearancesPtr->object_size(); ++it) {
+		Appearance object = g_game().m_appearancesPtr->object(it);
 
 		// This scenario should never happen but on custom assets this can break the loader.
 		if (!object.has_flags()) {
@@ -162,8 +167,12 @@ void Items::loadFromProtobuf() {
 		iType.pickupable = object.flags().take();
 		iType.rotatable = object.flags().rotate();
 		iType.wrapContainer = object.flags().wrap() || object.flags().unwrap();
+		if (iType.wrapContainer) {
+			iType.wrapableTo = ITEM_DECORATION_KIT;
+			iType.wrapable = true;
+		}
 		iType.multiUse = object.flags().multiuse();
-		iType.moveable = object.flags().unmove() == false;
+		iType.movable = object.flags().unmove() == false;
 		iType.canReadText = (object.flags().has_lenshelp() && object.flags().lenshelp().id() == 1112) || (object.flags().has_write() && object.flags().write().max_text_length() != 0) || (object.flags().has_write_once() && object.flags().write_once().max_text_length_once() != 0);
 		iType.canReadText = object.flags().has_write() || object.flags().has_write_once();
 		iType.isVertical = object.flags().has_hook() && object.flags().hook().direction() == HOOK_TYPE_SOUTH;
@@ -179,8 +188,7 @@ void Items::loadFromProtobuf() {
 		iType.isWrapKit = object.flags().wrapkit();
 
 		if (!iType.name.empty()) {
-			nameToItems.insert({ asLowerCaseString(iType.name),
-								 iType.id });
+			nameToItems.insert({ asLowerCaseString(iType.name), iType.id });
 		}
 	}
 
@@ -189,7 +197,7 @@ void Items::loadFromProtobuf() {
 
 bool Items::loadFromXml() {
 	pugi::xml_document doc;
-	auto folder = g_configManager().getString(CORE_DIRECTORY) + "/items/items.xml";
+	auto folder = g_configManager().getString(CORE_DIRECTORY, __FUNCTION__) + "/items/items.xml";
 	pugi::xml_parse_result result = doc.load_file(folder.c_str());
 	if (!result) {
 		printXMLError(__FUNCTION__, folder, result);
@@ -264,8 +272,7 @@ void Items::parseItemNode(const pugi::xml_node &itemNode, uint16_t id) {
 		}
 
 		itemType.name = xmlName;
-		nameToItems.insert({ asLowerCaseString(itemType.name),
-							 id });
+		nameToItems.insert({ asLowerCaseString(itemType.name), id });
 	}
 
 	itemType.loaded = true;

@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -21,7 +21,10 @@ class WeaponMelee;
 class WeaponDistance;
 class WeaponWand;
 
-using Weapon_ptr = std::unique_ptr<Weapon>;
+struct LuaVariant;
+
+using WeaponUnique_ptr = std::unique_ptr<Weapon>;
+using WeaponShared_ptr = std::shared_ptr<Weapon>;
 
 class Weapons final : public Scripts {
 public:
@@ -36,16 +39,16 @@ public:
 		return inject<Weapons>();
 	}
 
-	const Weapon* getWeapon(const Item* item) const;
+	const WeaponShared_ptr getWeapon(std::shared_ptr<Item> item) const;
 
 	static int32_t getMaxMeleeDamage(int32_t attackSkill, int32_t attackValue);
 	static int32_t getMaxWeaponDamage(uint32_t level, int32_t attackSkill, int32_t attackValue, float attackFactor, bool isMelee);
 
-	bool registerLuaEvent(Weapon* event);
-	void clear();
+	bool registerLuaEvent(WeaponShared_ptr event, bool fromXML = false);
+	void clear(bool isFromXML = false);
 
 private:
-	std::map<uint32_t, Weapon*> weapons;
+	std::map<uint32_t, WeaponShared_ptr> weapons;
 };
 
 constexpr auto g_weapons = Weapons::getInstance;
@@ -59,15 +62,15 @@ public:
 		return false;
 	}
 
-	int32_t playerWeaponCheck(Player* player, Creature* target, uint8_t shootRange) const;
-	static bool useFist(Player* player, Creature* target);
-	virtual bool useWeapon(Player* player, Item* item, Creature* target) const;
+	int32_t playerWeaponCheck(std::shared_ptr<Player> player, std::shared_ptr<Creature> target, uint8_t shootRange) const;
+	static bool useFist(std::shared_ptr<Player> player, std::shared_ptr<Creature> target);
+	virtual bool useWeapon(std::shared_ptr<Player> player, std::shared_ptr<Item> item, std::shared_ptr<Creature> target) const;
 
-	virtual int32_t getWeaponDamage(const Player* player, const Creature* target, const Item* item, bool maxDamage = false) const = 0;
-	virtual int32_t getElementDamage(const Player* player, const Creature* target, const Item* item) const = 0;
+	virtual int32_t getWeaponDamage(std::shared_ptr<Player> player, std::shared_ptr<Creature> target, std::shared_ptr<Item> item, bool maxDamage = false) const = 0;
+	virtual int32_t getElementDamage(std::shared_ptr<Player> player, std::shared_ptr<Creature> target, std::shared_ptr<Item> item) const = 0;
 	virtual CombatType_t getElementType() const = 0;
 	virtual int16_t getElementDamageValue() const = 0;
-	virtual CombatDamage getCombatDamage(CombatDamage combat, Player* player, Item* item, int32_t damageModifier) const;
+	virtual CombatDamage getCombatDamage(CombatDamage combat, std::shared_ptr<Player> player, std::shared_ptr<Item> item, int32_t damageModifier) const;
 	uint16_t getID() const {
 		return id;
 	}
@@ -173,18 +176,65 @@ public:
 		vocationString = str;
 	}
 
+	void setFromXML(bool newFromXML) {
+		m_fromXML = newFromXML;
+	}
+
+	bool isFromXML() const {
+		return m_fromXML;
+	}
+
+	void setChainSkillValue(double value) {
+		m_chainSkillValue = value;
+	}
+
+	double getChainSkillValue() const {
+		return m_chainSkillValue;
+	}
+
+	void setDisabledChain() {
+		m_isDisabledChain = true;
+	}
+
+	bool isChainDisabled() const {
+		return m_isDisabledChain;
+	}
+
+	const WeaponType_t getWeaponType() const {
+		return weaponType;
+	}
+
+	const std::shared_ptr<Combat> getCombat() const {
+		if (!m_combat) {
+			g_logger().error("Weapon::getCombat() - m_combat is nullptr");
+			return nullptr;
+		}
+
+		return m_combat;
+	}
+
+	std::shared_ptr<Combat> getCombat() {
+		if (!m_combat) {
+			m_combat = std::make_shared<Combat>();
+		}
+
+		return m_combat;
+	}
+
+	bool calculateSkillFormula(const std::shared_ptr<Player> &player, int32_t &attackSkill, int32_t &attackValue, float &attackFactor, int16_t &elementAttack, CombatDamage &damage, bool useCharges = false) const;
+
 protected:
-	void internalUseWeapon(Player* player, Item* item, Creature* target, int32_t damageModifier, int32_t cleavePercent = 0) const;
-	void internalUseWeapon(Player* player, Item* item, Tile* tile) const;
+	void internalUseWeapon(std::shared_ptr<Player> player, std::shared_ptr<Item> item, std::shared_ptr<Creature> target, int32_t damageModifier, int32_t cleavePercent = 0) const;
+	void internalUseWeapon(std::shared_ptr<Player> player, std::shared_ptr<Item> item, std::shared_ptr<Tile> tile) const;
 
 private:
-	virtual bool getSkillType(const Player*, const Item*, skills_t &, uint32_t &) const {
+	virtual bool getSkillType(std::shared_ptr<Player>, std::shared_ptr<Item>, skills_t &, uint32_t &) const {
 		return false;
 	}
 
-	uint32_t getManaCost(const Player* player) const;
-	int32_t getHealthCost(const Player* player) const;
-	bool executeUseWeapon(Player* player, const LuaVariant &var) const;
+	uint32_t getManaCost(std::shared_ptr<Player> player) const;
+	int32_t getHealthCost(std::shared_ptr<Player> player) const;
+	bool executeUseWeapon(std::shared_ptr<Player> player, const LuaVariant &var) const;
 
 	uint16_t id = 0;
 
@@ -196,26 +246,32 @@ private:
 	uint32_t healthPercent = 0;
 	uint32_t soul = 0;
 	uint32_t wieldInfo = WIELDINFO_NONE;
+	double m_chainSkillValue = 0.0;
 	uint8_t breakChance = 0;
 	bool enabled = true;
 	bool premium = false;
 	bool wieldUnproperly = false;
+	bool m_isDisabledChain = false;
 	std::string vocationString = "";
 
-	void onUsedWeapon(Player* player, Item* item, Tile* destTile) const;
+	void onUsedWeapon(std::shared_ptr<Player> player, std::shared_ptr<Item> item, std::shared_ptr<Tile> destTile) const;
 
-	static void decrementItemCount(Item* item);
+	static void decrementItemCount(std::shared_ptr<Item> item);
 
 	WeaponAction_t action = WEAPONACTION_NONE;
 	CombatParams params;
 	WeaponType_t weaponType;
 	std::map<uint16_t, bool> vocWeaponMap;
+	std::shared_ptr<Combat> m_combat;
+
+	bool m_fromXML = false;
 
 	friend class Combat;
 	friend class WeaponWand;
 	friend class WeaponMelee;
 	friend class WeaponDistance;
 	friend class WeaponFunctions;
+	friend class ItemParse;
 };
 
 class WeaponMelee final : public Weapon {
@@ -228,17 +284,17 @@ public:
 
 	void configureWeapon(const ItemType &it) override;
 
-	bool useWeapon(Player* player, Item* item, Creature* target) const override;
+	bool useWeapon(std::shared_ptr<Player> player, std::shared_ptr<Item> item, std::shared_ptr<Creature> target) const override;
 
-	int32_t getWeaponDamage(const Player* player, const Creature* target, const Item* item, bool maxDamage = false) const override;
-	int32_t getElementDamage(const Player* player, const Creature* target, const Item* item) const override;
+	int32_t getWeaponDamage(std::shared_ptr<Player> player, std::shared_ptr<Creature> target, std::shared_ptr<Item> item, bool maxDamage = false) const override;
+	int32_t getElementDamage(std::shared_ptr<Player> player, std::shared_ptr<Creature> target, std::shared_ptr<Item> item) const override;
 	CombatType_t getElementType() const override {
 		return elementType;
 	}
 	virtual int16_t getElementDamageValue() const override;
 
 private:
-	bool getSkillType(const Player* player, const Item* item, skills_t &skill, uint32_t &skillpoint) const override;
+	bool getSkillType(std::shared_ptr<Player> player, std::shared_ptr<Item> item, skills_t &skill, uint32_t &skillpoint) const override;
 	uint16_t elementDamage = 0;
 	CombatType_t elementType = COMBAT_NONE;
 };
@@ -256,17 +312,17 @@ public:
 		return true;
 	}
 
-	bool useWeapon(Player* player, Item* item, Creature* target) const override;
+	bool useWeapon(std::shared_ptr<Player> player, std::shared_ptr<Item> item, std::shared_ptr<Creature> target) const override;
 
-	int32_t getWeaponDamage(const Player* player, const Creature* target, const Item* item, bool maxDamage = false) const override;
-	int32_t getElementDamage(const Player* player, const Creature* target, const Item* item) const override;
+	int32_t getWeaponDamage(std::shared_ptr<Player> player, std::shared_ptr<Creature> target, std::shared_ptr<Item> item, bool maxDamage = false) const override;
+	int32_t getElementDamage(std::shared_ptr<Player> player, std::shared_ptr<Creature> target, std::shared_ptr<Item> item) const override;
 	CombatType_t getElementType() const override {
 		return elementType;
 	}
 	virtual int16_t getElementDamageValue() const override;
 
 private:
-	bool getSkillType(const Player* player, const Item* item, skills_t &skill, uint32_t &skillpoint) const override;
+	bool getSkillType(std::shared_ptr<Player> player, std::shared_ptr<Item> item, skills_t &skill, uint32_t &skillpoint) const override;
 
 	CombatType_t elementType = COMBAT_NONE;
 	uint16_t elementDamage = 0;
@@ -282,12 +338,12 @@ public:
 
 	void configureWeapon(const ItemType &it) override;
 
-	int32_t getWeaponDamage(const Player* player, const Creature* target, const Item* item, bool maxDamage = false) const override;
-	int32_t getElementDamage(const Player*, const Creature*, const Item*) const override {
+	int32_t getWeaponDamage(std::shared_ptr<Player> player, std::shared_ptr<Creature> target, std::shared_ptr<Item> item, bool maxDamage = false) const override;
+	int32_t getElementDamage(std::shared_ptr<Player>, std::shared_ptr<Creature>, std::shared_ptr<Item>) const override {
 		return 0;
 	}
 	CombatType_t getElementType() const override {
-		return COMBAT_NONE;
+		return params.combatType;
 	}
 	virtual int16_t getElementDamageValue() const override;
 	void setMinChange(int32_t change) {
@@ -299,7 +355,7 @@ public:
 	}
 
 private:
-	bool getSkillType(const Player*, const Item*, skills_t &, uint32_t &) const override {
+	bool getSkillType(std::shared_ptr<Player>, std::shared_ptr<Item>, skills_t &, uint32_t &) const override {
 		return false;
 	}
 

@@ -31,7 +31,6 @@ local setting = {
 	[2804] = 2030,
 	[2805] = 2904,
 	[2806] = 3513,
-	[2806] = 3513,
 	[2807] = 2959,
 	[2808] = 2963,
 	[2809] = 2426,
@@ -71,7 +70,9 @@ function constructionKits.onUse(player, item, fromPosition, target, toPosition, 
 	elseif not Tile(fromPosition):getHouse() then
 		player:sendTextMessage(MESSAGE_FAILURE, "You may construct this only inside a house.")
 	else
-		item:transform(kit)
+		item:transform(ITEM_DECORATION_KIT)
+		item:setAttribute(ITEM_ATTRIBUTE_DESCRIPTION, "Unwrap it in your own house to create a <" .. ItemType(kit):getName() .. ">.")
+		item:setCustomAttribute("unWrapId", kit)
 		fromPosition:sendMagicEffect(CONST_ME_POFF)
 		player:addAchievementProgress("Interior Decorator", 1000)
 	end

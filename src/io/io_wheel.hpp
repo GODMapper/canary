@@ -1,6 +1,6 @@
 /**
  * Canary - A free and open-source MMORPG server emulator
- * Copyright (©) 2019-2022 OpenTibiaBR <opentibiabr@outlook.com>
+ * Copyright (©) 2019-2024 OpenTibiaBR <opentibiabr@outlook.com>
  * Repository: https://github.com/opentibiabr/canary
  * License: https://github.com/opentibiabr/canary/blob/main/LICENSE
  * Contributors: https://github.com/opentibiabr/canary/graphs/contributors
@@ -11,6 +11,7 @@
 
 // Definitions of wheel of destiny enums
 #include "creatures/players/wheel/wheel_definitions.hpp"
+#include "creatures/players/wheel/wheel_gems.hpp"
 
 #include "creatures/creatures_definitions.hpp"
 
@@ -46,51 +47,24 @@ public:
 			};
 		};
 
-		struct Increase {
-			bool area = false;
-			int damage = 0;
-			int heal = 0;
-			int aditionalTarget = 0;
-			int damageReduction = 0;
-			int duration = 0;
-			int criticalDamage = 0;
-			int criticalChance = 0;
-		};
-		struct Decrease {
-			int cooldown = 0;
-			int manaCost = 0;
-			uint8_t secondaryGroupCooldown = 0;
-		};
-
-		struct Leech {
-			int mana = 0;
-			int life = 0;
-		};
-
 		struct Spells {
-			struct Grade {
-				Leech leech;
-				Increase increase;
-				Decrease decrease;
-			};
-
 			struct Druid {
-				std::array<Grade, 3> grade;
+				std::array<WheelSpells::Bonus, 3> grade;
 				std::string name;
 			};
 
 			struct Knight {
-				std::array<Grade, 3> grade;
+				std::array<WheelSpells::Bonus, 3> grade;
 				std::string name;
 			};
 
 			struct Paladin {
-				std::array<Grade, 3> grade;
+				std::array<WheelSpells::Bonus, 3> grade;
 				std::string name;
 			};
 
 			struct Sorcerer {
-				std::array<Grade, 3> grade;
+				std::array<WheelSpells::Bonus, 3> grade;
 				std::string name;
 			};
 
@@ -155,7 +129,7 @@ public:
 	 */
 	const std::vector<std::string> &getFocusSpells() const;
 
-	using VocationBonusFunction = std::function<void(Player &, uint16_t, uint8_t, PlayerWheelMethodsBonusData &)>;
+	using VocationBonusFunction = std::function<void(const std::shared_ptr<Player> &, uint16_t, uint8_t, PlayerWheelMethodsBonusData &)>;
 	using VocationBonusMap = std::map<WheelSlots_t, VocationBonusFunction>;
 	/**
 	 * @brief Retrieves the mapping of wheel slots to vocation bonus functions.
@@ -258,7 +232,7 @@ private:
 	 * @param slotType The slot type to be checked.
 	 * @return true if the number of points is equal to the player's points in the specified slot type, false otherwise.
 	 */
-	bool isMaxPointAddedToSlot(Player &player, uint16_t points, WheelSlots_t slotType) const;
+	bool isMaxPointAddedToSlot(const std::shared_ptr<Player> &player, uint16_t points, WheelSlots_t slotType) const;
 
 	/**
 	 * @brief Checks if the vocation ID corresponds to a knight.
@@ -296,18 +270,16 @@ private:
 	 * @param points The number of points required to add the spell.
 	 * @param spellName The name of the spell to add.
 	 */
-	void addSpell(Player &player, PlayerWheelMethodsBonusData &bonusData, WheelSlots_t slotType, uint16_t points, const std::string &spellName) const;
+	void addSpell(const std::shared_ptr<Player> &player, PlayerWheelMethodsBonusData &bonusData, WheelSlots_t slotType, uint16_t points, const std::string &spellName) const;
 
 	/**
-	 * @brief Increases the resistance value of the specified combat type for the player's bonus data if the number of points is equal to the player's points in the specified slot type.
-	 * @param player The player whose resistance will be increased.
+	 * @brief Unlock a vessel resonance if the number of points is equal to the player's points in the specified slot type.
+	 * @param player The player to receive the vessel resonance.
 	 * @param bonusData The bonus data to update.
 	 * @param slotType The slot type to check the points against.
-	 * @param points The number of points required to increase the resistance.
-	 * @param combat The combat type to increase the resistance for.
-	 * @param value The value to increase the resistance by.
+	 * @param points The number of points required to add the vessel resonance.
 	 */
-	void increaseResistance(Player &player, PlayerWheelMethodsBonusData &bonusData, WheelSlots_t slotType, uint16_t points, CombatType_t combat, int16_t value) const;
+	void addVesselResonance(const std::shared_ptr<Player> &player, PlayerWheelMethodsBonusData &bonusData, WheelSlots_t slotType, WheelGemAffinity_t affinity, uint16_t points) const;
 
 	/**
 	 * @brief Initialize the wheel map functions.
@@ -327,51 +299,51 @@ private:
 	 * @details It's important to note that although the functions have similar objectives, they are tailored to each specific vocation, allowing for proper customization for each one. Furthermore, these functions are designed to prevent code redundancy, promoting a modular structure that is easy to maintain.
 	 * @note Note: Due to the large number of similar functions in this module, we have chosen not to document each function individually to avoid excessive documentation work. However, the information provided in this general description should provide a sufficient overview of the purpose and operation of these functions.
 	 */
-	void slotGreen200(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotGreenTop150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotGreenTop100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotGreen200(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotGreenTop150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotGreenTop100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 
-	void slotRedTop100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotRedTop150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotRed200(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotRedTop100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotRedTop150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotRed200(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 
-	void slotGreenBottom150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotGreenMiddle100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotGreenTop75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotGreenBottom150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotGreenMiddle100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotGreenTop75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 
-	void slotRedTop75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotRedMiddle100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotRedBottom150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotRedTop75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotRedMiddle100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotRedBottom150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 
-	void slotGreenBottom100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotGreenBottom75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotGreen50(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotGreenBottom100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotGreenBottom75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotGreen50(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 
-	void slotRed50(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotRedBottom75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotRedBottom100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotRed50(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotRedBottom75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotRedBottom100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 
-	void slotBlueTop100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotBlueTop75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotBlue50(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotBlueTop100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotBlueTop75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotBlue50(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 
-	void slotPurple50(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotPurpleTop75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotPurpleTop100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotPurple50(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotPurpleTop75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotPurpleTop100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 
-	void slotBlueTop150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotBlueMiddle100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotBlueBottom75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotBlueTop150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotBlueMiddle100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotBlueBottom75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 
-	void slotPurpleBottom75(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotPurpleMiddle100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotPurpleTop150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotPurpleBottom75(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotPurpleMiddle100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotPurpleTop150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 
-	void slotBlue200(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotBlueBottom150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotBlueBottom100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotBlue200(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotBlueBottom150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotBlueBottom100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 
-	void slotPurpleBottom100(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotPurpleBottom150(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
-	void slotPurple200(Player &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotPurpleBottom100(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotPurpleBottom150(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
+	void slotPurple200(const std::shared_ptr<Player> &player, uint16_t points, uint8_t vocationCipId, PlayerWheelMethodsBonusData &bonusData) const;
 };
